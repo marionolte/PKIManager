@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.macmario.services</groupId>
+    <artifactId>macmario-service-PKIManager</artifactId>
+    <version>1.0</version>
+    <packaging>war</packaging>
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk14</artifactId>
+            <version>1.7.36</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.1.0</version>
+            <type>jar</type>
+        </dependency>
+        <!-- Jakarta Servlet API (Tomcat 11) -->
+        <dependency>
+            <groupId>jakarta.servlet.jsp</groupId>
+            <artifactId>jakarta.servlet.jsp-api</artifactId>
+            <version>4.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.84</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <version>1.84</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>com.macmario.services</groupId>
+            <artifactId>macmario-services-PKI</artifactId>
+            <version>1.0</version>
+            <type>jar</type>
+        </dependency>
+    </dependencies>
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>25</maven.compiler.release>
+        <exec.mainClass>com.macmario.services.pki.manager.PKIManager</exec.mainClass>
+    </properties>
+</project>
