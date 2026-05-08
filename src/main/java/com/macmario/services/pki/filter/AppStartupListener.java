@@ -17,7 +17,7 @@ public class AppStartupListener implements ServletContextListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
-        log.info("=== MHService PKI Manager starting ===");
+        log.info("=== MH Service PKI Manager starting ===");
         try {
             EntityManagerProvider.init();
             seedDefaultConfig();
