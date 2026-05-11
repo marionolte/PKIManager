@@ -20,14 +20,14 @@ String statusLabel=ca.getStatus()==CaConfig.CaStatus.DISABLED?"Disabled":ca.isEx
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
 <style>
-:root{--pki-dark:#0d1b2a;--pki-teal:#00b4d8;--pki-light:#f0f4f8;}
+:root{--pki-dark:#e8ecf0;--pki-teal:#00b4d8;--pki-light:#f0f4f8;}
 body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
-.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--pki-dark);display:flex;flex-direction:column;z-index:100;}
-.sidebar-brand{padding:1.5rem 1.2rem;border-bottom:1px solid rgba(255,255,255,.08);}
-.sidebar-brand h5{color:var(--pki-teal);font-weight:700;margin:0;font-size:.95rem;}
-.nav-sect{padding:.5rem 1rem .2rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#556;}
-.sidebar .nav-link{color:#9bb;padding:.5rem 1.2rem;font-size:.875rem;border-radius:0;}
-.sidebar .nav-link:hover,.sidebar .nav-link.active{background:rgba(0,180,216,.12);color:var(--pki-teal);}
+.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--pki-dark);border-right:1px solid #d1d9e0;display:flex;flex-direction:column;z-index:100;}
+.sidebar-brand{padding:1.5rem 1.2rem;border-bottom:1px solid rgba(0,0,0,.08);}
+.sidebar-brand h5{color:#1b4f8a;font-weight:700;margin:0;font-size:.95rem;}
+.nav-sect{padding:.5rem 1rem .2rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#64748b;}
+.sidebar .nav-link{color:#334155;padding:.5rem 1.2rem;font-size:.875rem;border-radius:0;}
+.sidebar .nav-link:hover,.sidebar .nav-link.active{background:rgba(27,79,138,.1);color:#1b4f8a;}
 .sidebar .nav-link i{width:20px;margin-right:8px;}
 .main-content{margin-left:240px;min-height:100vh;}
 .topbar{background:#fff;border-bottom:1px solid #dde4ee;padding:.75rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
@@ -35,12 +35,12 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 .info-card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:1.5rem;}
 .table-card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);overflow:hidden;}
 .table-card .table{margin:0;}
-.table-card .table thead{background:var(--pki-dark);color:#cdd;font-size:.78rem;text-transform:uppercase;}
+.table-card .table thead{background:#dde4ee;color:#334155;font-size:.78rem;text-transform:uppercase;}
 .table-card .table thead th{border:none;padding:.9rem 1rem;font-weight:500;}
 .table-card .table tbody td{padding:.75rem 1rem;vertical-align:middle;font-size:.875rem;border-color:#f0f0f0;}
 .dr{display:flex;gap:.5rem;padding:.4rem 0;border-bottom:1px solid #f5f5f5;font-size:.875rem;}
 .dl{min-width:160px;color:#888;font-size:.8rem;font-weight:500;}
-.cert-pem{font-family:'Courier New',monospace;font-size:.72rem;background:#0d1b2a;color:#7fdbca;border-radius:8px;padding:1rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;}
+.cert-pem{font-family:'Courier New',monospace;font-size:.72rem;background:#f1f5f9;color:#1e293b;border:1px solid #dde4ee;border-radius:8px;padding:1rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;}
 .badge-valid{background:#d1fae5;color:#065f46;} .badge-revoked{background:#fee2e2;color:#991b1b;}
 .badge-root{background:#dbeafe;color:#1e40af;} .badge-inter{background:#ede9fe;color:#5b21b6;} .badge-issuing{background:#d1fae5;color:#065f46;}
 </style></head>
@@ -48,7 +48,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 <div class="sidebar">
   <div class="sidebar-brand"><div class="d-flex align-items-center gap-2 mb-1">
     <i class="bi bi-shield-lock-fill fs-4" style="color:var(--pki-teal)"></i><h5>PKI Manager</h5>
-  </div><small style="color:#888;font-size:.72rem;">MHService Internal CA</small></div>
+  </div><small style="color:#888;font-size:.72rem;">Internal CA</small></div>
   <nav class="flex-grow-1 py-2">
     <div class="nav-sect">Overview</div>
     <a href="<%=ctx%>/dashboard" class="nav-link"><i class="bi bi-speedometer2"></i>Dashboard</a>
@@ -62,7 +62,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 </div>
 <div class="main-content">
   <div class="topbar">
-    <span style="font-weight:600;color:var(--pki-dark);"><i class="bi bi-shield-lock me-2"></i><%=e(ca.getDisplayName())%></span>
+    <span style="font-weight:600;color:#0d1b2a;"><i class="bi bi-shield-lock me-2"></i><%=e(ca.getDisplayName())%></span>
     <div class="d-flex gap-2">
       <a href="<%=ctx%>/ca/<%=ca.getId()%>/cert.pem" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Download PEM</a>
       <a href="<%=ctx%>/cert/issue?caId=<%=ca.getId()%>" class="btn btn-success btn-sm"><i class="bi bi-plus me-1"></i>Issue Certificate</a>

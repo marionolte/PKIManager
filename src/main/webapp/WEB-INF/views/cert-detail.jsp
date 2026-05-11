@@ -12,14 +12,14 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
 <style>
-:root{--pki-dark:#0d1b2a;--pki-teal:#00b4d8;--pki-light:#f0f4f8;}
+:root{--pki-dark:#e8ecf0;--pki-teal:#00b4d8;--pki-light:#f0f4f8;}
 body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
-.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--pki-dark);display:flex;flex-direction:column;z-index:100;}
-.sidebar-brand{padding:1.5rem 1.2rem;border-bottom:1px solid rgba(255,255,255,.08);}
-.sidebar-brand h5{color:var(--pki-teal);font-weight:700;margin:0;font-size:.95rem;}
-.nav-sect{padding:.5rem 1rem .2rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#556;}
-.sidebar .nav-link{color:#9bb;padding:.5rem 1.2rem;font-size:.875rem;border-radius:0;}
-.sidebar .nav-link:hover,.sidebar .nav-link.active{background:rgba(0,180,216,.12);color:var(--pki-teal);}
+.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--pki-dark);border-right:1px solid #d1d9e0;display:flex;flex-direction:column;z-index:100;}
+.sidebar-brand{padding:1.5rem 1.2rem;border-bottom:1px solid rgba(0,0,0,.08);}
+.sidebar-brand h5{color:#1b4f8a;font-weight:700;margin:0;font-size:.95rem;}
+.nav-sect{padding:.5rem 1rem .2rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#64748b;}
+.sidebar .nav-link{color:#334155;padding:.5rem 1.2rem;font-size:.875rem;border-radius:0;}
+.sidebar .nav-link:hover,.sidebar .nav-link.active{background:rgba(27,79,138,.1);color:#1b4f8a;}
 .sidebar .nav-link i{width:20px;margin-right:8px;}
 .main-content{margin-left:240px;min-height:100vh;}
 .topbar{background:#fff;border-bottom:1px solid #dde4ee;padding:.75rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
@@ -27,7 +27,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 .info-card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:1.5rem;}
 .dr{display:flex;gap:.5rem;padding:.4rem 0;border-bottom:1px solid #f5f5f5;font-size:.875rem;}
 .dl{min-width:170px;color:#888;font-size:.8rem;font-weight:500;}
-.cert-pem{font-family:'Courier New',monospace;font-size:.72rem;background:#0d1b2a;color:#7fdbca;border-radius:8px;padding:1rem;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;}
+.cert-pem{font-family:'Courier New',monospace;font-size:.72rem;background:#f1f5f9;color:#1e293b;border:1px solid #dde4ee;border-radius:8px;padding:1rem;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;}
 .badge-valid{background:#d1fae5;color:#065f46;} .badge-revoked{background:#fee2e2;color:#991b1b;}
 .fingerprint{font-family:monospace;font-size:.68rem;word-break:break-all;color:#555;}
 </style></head>
@@ -49,7 +49,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 </div>
 <div class="main-content">
   <div class="topbar">
-    <span style="font-weight:600;color:var(--pki-dark);"><i class="bi bi-file-earmark-lock me-2"></i><%=e(cert.getCommonName())%></span>
+    <span style="font-weight:600;color:#0d1b2a;"><i class="bi bi-file-earmark-lock me-2"></i><%=e(cert.getCommonName())%></span>
     <div class="d-flex gap-2">
       <a href="<%=ctx%>/cert/<%=cert.getId()%>/download.pem" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Download PEM</a>
       <% if(cert.getCertStatus()==CertificateRecord.CertStatus.VALID){ %>

@@ -5,7 +5,7 @@
          https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
          version="6.0">
 
-    <display-name>MHService PKI Manager</display-name>
+    <display-name>MH Service PKI Manager</display-name>
     <description>Internal PKI Management</description>
 
     <!-- ── Welcome file ── -->

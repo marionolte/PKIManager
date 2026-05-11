@@ -9,21 +9,21 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
 <style>
-:root{--pki-dark:#0d1b2a;--pki-teal:#00b4d8;--pki-light:#f0f4f8;}
+:root{--pki-dark:#e8ecf0;--pki-teal:#00b4d8;--pki-light:#f0f4f8;}
 body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
-.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--pki-dark);display:flex;flex-direction:column;z-index:100;}
-.sidebar-brand{padding:1.5rem 1.2rem;border-bottom:1px solid rgba(255,255,255,.08);}
-.sidebar-brand h5{color:var(--pki-teal);font-weight:700;margin:0;font-size:.95rem;}
-.nav-sect{padding:.5rem 1rem .2rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#556;}
-.sidebar .nav-link{color:#9bb;padding:.5rem 1.2rem;font-size:.875rem;border-radius:0;}
-.sidebar .nav-link:hover,.sidebar .nav-link.active{background:rgba(0,180,216,.12);color:var(--pki-teal);}
+.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--pki-dark);border-right:1px solid #d1d9e0;display:flex;flex-direction:column;z-index:100;}
+.sidebar-brand{padding:1.5rem 1.2rem;border-bottom:1px solid rgba(0,0,0,.08);}
+.sidebar-brand h5{color:#1b4f8a;font-weight:700;margin:0;font-size:.95rem;}
+.nav-sect{padding:.5rem 1rem .2rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#64748b;}
+.sidebar .nav-link{color:#334155;padding:.5rem 1.2rem;font-size:.875rem;border-radius:0;}
+.sidebar .nav-link:hover,.sidebar .nav-link.active{background:rgba(27,79,138,.1);color:#1b4f8a;}
 .sidebar .nav-link i{width:20px;margin-right:8px;}
 .main-content{margin-left:240px;min-height:100vh;}
 .topbar{background:#fff;border-bottom:1px solid #dde4ee;padding:.75rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
 .content-area{padding:2rem;}
 .table-card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);overflow:hidden;}
 .table-card .table{margin:0;}
-.table-card .table thead{background:var(--pki-dark);color:#cdd;font-size:.78rem;text-transform:uppercase;}
+.table-card .table thead{background:#dde4ee;color:#334155;font-size:.78rem;text-transform:uppercase;}
 .table-card .table thead th{border:none;padding:.9rem 1rem;font-weight:500;}
 .table-card .table tbody td{padding:.75rem 1rem;vertical-align:middle;font-size:.875rem;border-color:#f0f0f0;}
 .table-card .table tbody tr:hover{background:#f7faff;}
@@ -44,11 +44,11 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <a href="<%=ctx%>/cert" class="nav-link active"><i class="bi bi-file-earmark-lock2"></i>All Certificates</a>
     <a href="<%=ctx%>/cert/issue" class="nav-link"><i class="bi bi-plus-circle-dotted"></i>Issue Certificate</a>
   </nav>
-  <div class="p-3" style="border-top:1px solid rgba(255,255,255,.06);font-size:.72rem;color:#556;"><i class="bi bi-info-circle me-1"></i>Based on marionolte/PKI</div>
+  <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;"><i class="bi bi-info-circle me-1"></i>Based on marionolte/PKI</div>
 </div>
 <div class="main-content">
   <div class="topbar">
-    <span style="font-weight:600;color:var(--pki-dark);"><i class="bi bi-file-earmark-lock2 me-2"></i>All Certificates</span>
+    <span style="font-weight:600;color:#0d1b2a;"><i class="bi bi-file-earmark-lock2 me-2"></i>All Certificates</span>
     <div class="d-flex gap-2">
       <input type="text" id="fi" class="form-control form-control-sm" placeholder="🔍 Filter…" style="max-width:220px;" oninput="ft()"/>
       <a href="<%=ctx%>/cert/issue" class="btn btn-success btn-sm"><i class="bi bi-plus me-1"></i>Issue</a>
