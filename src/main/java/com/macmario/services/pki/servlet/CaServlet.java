@@ -11,7 +11,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.bouncycastle.operator.OperatorCreationException;
+
 import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.sql.SQLException;
 import java.util.Optional;
 
 @WebServlet("/ca/*")
@@ -26,12 +30,12 @@ public class CaServlet extends HttpServlet {
         String path = req.getPathInfo();
         if (path == null || path.equals("/") || path.isEmpty()) {
             try { req.setAttribute("caList", caService.findAll()); }
-            catch (Exception e) { req.setAttribute("error", e.getMessage()); }
+            catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.setAttribute("page", "ca-list");
             req.getRequestDispatcher("/WEB-INF/views/ca-list.jsp").forward(req, resp);
         } else if (path.equals("/create")) {
             try { req.setAttribute("allCas", caService.findAll()); }
-            catch (Exception e) { req.setAttribute("error", e.getMessage()); }
+            catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.getRequestDispatcher("/WEB-INF/views/ca-form.jsp").forward(req, resp);
         } else if (path.matches("/\\d+")) {
             try {
@@ -42,7 +46,7 @@ public class CaServlet extends HttpServlet {
                 req.setAttribute("children",     caService.findChildren(id));
                 req.setAttribute("certificates", certService.findByCa(id));
                 req.setAttribute("certCount",    certService.countTotal());
-            } catch (Exception e) { req.setAttribute("error", e.getMessage()); }
+            } catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.getRequestDispatcher("/WEB-INF/views/ca-detail.jsp").forward(req, resp);
         } else if (path.matches("/\\d+/cert\\.pem")) {
             try {
@@ -55,7 +59,7 @@ public class CaServlet extends HttpServlet {
                         resp.getWriter().write(ca.getCertificatePem() != null ? ca.getCertificatePem() : "");
                     } catch (IOException ex) { log.error("Download error", ex); }
                 });
-            } catch (Exception e) { resp.sendError(500, e.getMessage()); }
+            } catch (NumberFormatException | SQLException e) { resp.sendError(500, e.getMessage()); }
         } else { resp.sendError(404); }
     }
 
@@ -81,10 +85,10 @@ public class CaServlet extends HttpServlet {
                 caService.enable(Long.parseLong(path.substring(1, path.indexOf("/enable"))));
                 resp.sendRedirect(req.getContextPath() + "/ca/" + path.substring(1, path.indexOf("/enable")));
             } else { resp.sendError(404); }
-        } catch (Exception e) {
+        } catch (GeneralSecurityException | OperatorCreationException | IOException | SQLException | IllegalArgumentException e) {
             log.error("CA operation failed", e);
             req.setAttribute("error", e.getMessage());
-            try { req.setAttribute("allCas", caService.findAll()); } catch (Exception ignored) {}
+            try { req.setAttribute("allCas", caService.findAll()); } catch (SQLException ignored) {}
             req.getRequestDispatcher("/WEB-INF/views/ca-form.jsp").forward(req, resp);
         }
     }

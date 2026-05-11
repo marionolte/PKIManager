@@ -1,11 +1,12 @@
 <%@ page contentType="text/html;charset=UTF-8" %>
-<%@ page import="java.util.List, com.macmario.services.pki.entity.CaConfig" %>
-<%! private String e(String s){if(s==null)return "";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");} 
+<%@ page import="java.util.List, com.macmario.services.pki.entity.CaConfig, com.macmario.services.pki.entity.PkiUser" %>
+<%! private String e(String s){if(s==null)return "";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");}
     private String v(String s){if(s==null)return "";return e(s);} %>
 <% List<CaConfig> allCas=(List<CaConfig>)request.getAttribute("allCas");
    if(allCas==null)allCas=java.util.Collections.emptyList();
    String ctx=request.getContextPath();
-   String error=(String)request.getAttribute("error"); %>
+   String error=(String)request.getAttribute("error");
+   PkiUser me=(PkiUser)session.getAttribute("currentUser"); %>
 <!DOCTYPE html><html lang="de">
 <head><meta charset="UTF-8"/><title>PKI Manager – New CA</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
@@ -41,7 +42,18 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">Certificates</div>
     <a href="<%=ctx%>/cert" class="nav-link"><i class="bi bi-file-earmark-lock2"></i>All Certificates</a>
     <a href="<%=ctx%>/cert/issue" class="nav-link"><i class="bi bi-plus-circle-dotted"></i>Issue Certificate</a>
+    <div class="nav-sect mt-2">Requests</div>
+    <a href="<%=ctx%>/admin/csr-jobs" class="nav-link"><i class="bi bi-inbox"></i>CSR Jobs</a>
+    <div class="nav-sect mt-2">Administration</div>
+    <a href="<%=ctx%>/admin/users/" class="nav-link"><i class="bi bi-people"></i>Users</a>
+    <a href="<%=ctx%>/admin/acme" class="nav-link"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
   </nav>
+  <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
+    <i class="bi bi-person-circle me-1"></i><%=me!=null?e(me.getDisplayName()):""%>
+    <form method="post" action="<%=ctx%>/logout" class="d-inline ms-2">
+      <button class="btn btn-link btn-sm p-0 text-danger" style="font-size:.72rem;"><i class="bi bi-box-arrow-right"></i> Logout</button>
+    </form>
+  </div>
 </div>
 <div class="main-content">
   <div class="topbar">
@@ -107,7 +119,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
         <div class="fsect">Cryptographic Settings <span class="conf-hint ms-2">default_days, default_md</span></div>
         <div class="row g-3 mb-4">
           <div class="col-md-3"><label class="form-label fw-semibold">Key Size (bits)</label>
-            <select name="keySize" class="form-select"><option value="2048">2048</option><option value="4096" selected>4096</option></select></div>
+            <select name="keySize" class="form-select"><option value="4096">4096</option><option value="8192" selected>8192</option></select></div>
           <div class="col-md-3"><label class="form-label fw-semibold">Digest (default_md)</label>
             <select name="defaultMd" class="form-select"><option value="sha256" selected>sha256</option><option value="sha384">sha384</option><option value="sha512">sha512</option></select></div>
           <div class="col-md-3"><label class="form-label fw-semibold">Validity (days)</label>

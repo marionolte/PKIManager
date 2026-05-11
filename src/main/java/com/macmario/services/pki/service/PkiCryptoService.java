@@ -15,6 +15,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequest;
@@ -22,10 +23,18 @@ import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.math.BigInteger;
-import java.security.*;
+import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.SecureRandom;
+import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -54,7 +63,7 @@ public class PkiCryptoService {
     /**
      * Generate a self-signed Root CA certificate and populate CaConfig with PEM data.
      */
-    public void initRootCa(CaConfig ca) throws Exception {
+    public void initRootCa(CaConfig ca) throws GeneralSecurityException, OperatorCreationException, IOException {
         log.info("Generating Root CA: {}", ca.getCommonName());
 
         KeyPair keyPair = generateKeyPair(ca.getKeySize());
@@ -93,7 +102,7 @@ public class PkiCryptoService {
     /**
      * Generate an Intermediate / Issuing CA certificate signed by the parent CA.
      */
-    public void initSubCa(CaConfig ca, CaConfig parentCa) throws Exception {
+    public void initSubCa(CaConfig ca, CaConfig parentCa) throws GeneralSecurityException, OperatorCreationException, IOException {
         log.info("Generating Sub CA: {} signed by {}", ca.getCommonName(), parentCa.getCommonName());
 
         KeyPair keyPair = generateKeyPair(ca.getKeySize());
@@ -138,7 +147,7 @@ public class PkiCryptoService {
      * Issue a certificate from a CSR, signed by the given CA.
      * Returns a populated CertificateRecord (not yet persisted).
      */
-    public CertificateRecord signCsr(String csrPem, CaConfig ca, CertificateRecord template) throws Exception {
+    public CertificateRecord signCsr(String csrPem, CaConfig ca, CertificateRecord template) throws GeneralSecurityException, OperatorCreationException, IOException {
         PKCS10CertificationRequest csr = (PKCS10CertificationRequest)
                 new PEMParser(new StringReader(csrPem)).readObject();
         JcaPKCS10CertificationRequest jcaCsr = new JcaPKCS10CertificationRequest(csr).setProvider("BC");
@@ -183,7 +192,7 @@ public class PkiCryptoService {
      * Generate a key pair + CSR for a new certificate and sign it immediately.
      * Useful for server/client certs managed entirely by PKI Manager.
      */
-    public CertificateRecord generateAndSign(CaConfig ca, CertificateRecord template) throws Exception {
+    public CertificateRecord generateAndSign(CaConfig ca, CertificateRecord template) throws GeneralSecurityException, OperatorCreationException, IOException {
         KeyPair keyPair = generateKeyPair(template.getKeySize());
         X500Name subject = buildX500NameFromCert(template);
 
@@ -203,7 +212,7 @@ public class PkiCryptoService {
     // Helper methods
     // ──────────────────────────────────────────
 
-    private KeyPair generateKeyPair(int keySize) throws Exception {
+    private KeyPair generateKeyPair(int keySize) throws GeneralSecurityException {
         KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA", "BC");
         gen.initialize(keySize, new SecureRandom());
         return gen.generateKeyPair();
@@ -239,7 +248,7 @@ public class PkiCryptoService {
         return b.build();
     }
 
-    private PrivateKey readPrivateKey(String pem) throws Exception {
+    private PrivateKey readPrivateKey(String pem) throws IOException {
         try (PEMParser parser = new PEMParser(new StringReader(pem))) {
             Object obj = parser.readObject();
             if (obj instanceof org.bouncycastle.openssl.PEMKeyPair kp) {
@@ -257,7 +266,7 @@ public class PkiCryptoService {
         }
     }
 
-    private String toPem(Object obj) throws Exception {
+    private String toPem(Object obj) throws IOException {
         StringWriter sw = new StringWriter();
         try (JcaPEMWriter writer = new JcaPEMWriter(sw)) {
             writer.writeObject(obj);
@@ -278,11 +287,11 @@ public class PkiCryptoService {
         };
     }
 
-    private SubjectKeyIdentifier createSubjectKeyId(PublicKey pub) throws Exception {
+    private SubjectKeyIdentifier createSubjectKeyId(PublicKey pub) {
         return new SubjectKeyIdentifier(pub.getEncoded());
     }
 
-    private void applyKeyUsage(X509v3CertificateBuilder b, CertificateRecord.CertType type) throws Exception {
+    private void applyKeyUsage(X509v3CertificateBuilder b, CertificateRecord.CertType type) throws IOException {
         int usage = switch (type) {
             case SERVER        -> KeyUsage.digitalSignature | KeyUsage.keyEncipherment;
             case CLIENT        -> KeyUsage.digitalSignature | KeyUsage.keyAgreement;
@@ -293,7 +302,7 @@ public class PkiCryptoService {
         b.addExtension(Extension.keyUsage, true, new KeyUsage(usage));
     }
 
-    private void addSanExtension(X509v3CertificateBuilder b, CertificateRecord cr) throws Exception {
+    private void addSanExtension(X509v3CertificateBuilder b, CertificateRecord cr) throws IOException {
         List<GeneralName> names = new ArrayList<>();
         if (cr.getSanDns() != null && !cr.getSanDns().isBlank()) {
             for (String dns : cr.getSanDns().split(",")) {
@@ -313,7 +322,7 @@ public class PkiCryptoService {
         }
     }
 
-    private void addCrlDistPoint(X509v3CertificateBuilder b, String crlUrl) throws Exception {
+    private void addCrlDistPoint(X509v3CertificateBuilder b, String crlUrl) throws IOException {
         GeneralName gn = new GeneralName(GeneralName.uniformResourceIdentifier, crlUrl);
         DistributionPointName dpn = new DistributionPointName(new GeneralNames(gn));
         DistributionPoint dp = new DistributionPoint(dpn, null, null);
@@ -321,7 +330,7 @@ public class PkiCryptoService {
                 new CRLDistPoint(new DistributionPoint[]{dp}));
     }
 
-    private String fingerprint(X509Certificate cert) throws Exception {
+    private String fingerprint(X509Certificate cert) throws GeneralSecurityException {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         byte[] der = cert.getEncoded();
         byte[] hash = md.digest(der);

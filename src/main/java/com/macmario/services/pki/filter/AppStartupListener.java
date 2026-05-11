@@ -1,5 +1,6 @@
 package com.macmario.services.pki.filter;
 
+import com.macmario.services.pki.service.UserService;
 import com.macmario.services.pki.util.EntityManagerProvider;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
@@ -8,8 +9,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.Driver;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Enumeration;
 
 @WebListener
 public class AppStartupListener implements ServletContextListener {
@@ -21,8 +26,9 @@ public class AppStartupListener implements ServletContextListener {
         try {
             EntityManagerProvider.init();
             seedDefaultConfig();
+            seedDefaultAdminUser();
             log.info("=== PKI Manager ready ===");
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Startup failed", e);
             throw new RuntimeException("PKI Manager startup failed", e);
         }
@@ -32,6 +38,19 @@ public class AppStartupListener implements ServletContextListener {
     public void contextDestroyed(ServletContextEvent sce) {
         log.info("=== PKI Manager shutting down ===");
         EntityManagerProvider.close();
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        Enumeration<Driver> drivers = DriverManager.getDrivers();
+        while (drivers.hasMoreElements()) {
+            Driver driver = drivers.nextElement();
+            if (driver.getClass().getClassLoader() == cl) {
+                try {
+                    DriverManager.deregisterDriver(driver);
+                    log.info("Deregistered JDBC driver: {}", driver);
+                } catch (SQLException e) {
+                    log.error("Error deregistering JDBC driver", e);
+                }
+            }
+        }
     }
 
     private void seedDefaultConfig() {
@@ -40,12 +59,24 @@ public class AppStartupListener implements ServletContextListener {
             seedIfAbsent(c, "crl.validity.days", "30", "CRL validity in days");
             seedIfAbsent(c, "cert.expiry.warn.days", "30", "Days before expiry to warn");
             seedIfAbsent(c, "org.name", "MHService", "Organisation name");
-        } catch (Exception e) {
+        } catch (SQLException e) {
             log.warn("Could not seed config: {}", e.getMessage());
         }
     }
 
-    private void seedIfAbsent(Connection c, String key, String value, String desc) throws Exception {
+    private void seedDefaultAdminUser() {
+        try {
+            UserService us = new UserService();
+            if (us.countUsers() == 0) {
+                us.createUser("admin", "admin", "PKI Administrator", "admin@pki.local", com.macmario.services.pki.entity.PkiUser.Role.ADMIN);
+                log.info("Default admin user created (admin / admin) — change password immediately!");
+            }
+        } catch (SQLException e) {
+            log.warn("Could not seed admin user: {}", e.getMessage());
+        }
+    }
+
+    private void seedIfAbsent(Connection c, String key, String value, String desc) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(
             "SELECT cfg_key FROM PKI_CONFIGURATION WHERE cfg_key=?")) {
             ps.setString(1, key);

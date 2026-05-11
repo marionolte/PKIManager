@@ -13,7 +13,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.bouncycastle.operator.OperatorCreationException;
+
 import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.sql.SQLException;
 import java.util.Optional;
 
 @WebServlet("/cert/*")
@@ -28,11 +32,11 @@ public class CertificateServlet extends HttpServlet {
         String path = req.getPathInfo();
         if (path == null || path.equals("/") || path.isEmpty()) {
             try { req.setAttribute("certificates", certService.findAll()); }
-            catch (Exception e) { req.setAttribute("error", e.getMessage()); }
+            catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.getRequestDispatcher("/WEB-INF/views/cert-list.jsp").forward(req, resp);
         } else if (path.equals("/issue")) {
             try { req.setAttribute("allCas", caService.findAll()); }
-            catch (Exception e) { req.setAttribute("error", e.getMessage()); }
+            catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.getRequestDispatcher("/WEB-INF/views/cert-form.jsp").forward(req, resp);
         } else if (path.matches("/\\d+")) {
             try {
@@ -41,7 +45,7 @@ public class CertificateServlet extends HttpServlet {
                 if (cert.isEmpty()) { resp.sendError(404, "Certificate not found"); return; }
                 req.setAttribute("cert", cert.get());
                 req.setAttribute("revocationReasons", RevokedCertificate.RevocationReason.values());
-            } catch (Exception e) { req.setAttribute("error", e.getMessage()); }
+            } catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.getRequestDispatcher("/WEB-INF/views/cert-detail.jsp").forward(req, resp);
         } else if (path.matches("/\\d+/download\\.pem")) {
             try {
@@ -54,7 +58,7 @@ public class CertificateServlet extends HttpServlet {
                         resp.getWriter().write(cert.getCertificatePem() != null ? cert.getCertificatePem() : "");
                     } catch (IOException ex) { log.error("Download error", ex); }
                 });
-            } catch (Exception e) { resp.sendError(500, e.getMessage()); }
+            } catch (NumberFormatException | SQLException e) { resp.sendError(500, e.getMessage()); }
         } else { resp.sendError(404); }
     }
 
@@ -84,10 +88,10 @@ public class CertificateServlet extends HttpServlet {
                 certService.revoke(id, reason, "admin", comment);
                 resp.sendRedirect(req.getContextPath() + "/cert/" + id);
             } else { resp.sendError(404); }
-        } catch (Exception e) {
+        } catch (GeneralSecurityException | OperatorCreationException | IOException | SQLException | IllegalArgumentException e) {
             log.error("Certificate operation failed", e);
             req.setAttribute("error", e.getMessage());
-            try { req.setAttribute("allCas", caService.findAll()); } catch (Exception ignored) {}
+            try { req.setAttribute("allCas", caService.findAll()); } catch (SQLException ignored) {}
             req.getRequestDispatcher("/WEB-INF/views/cert-form.jsp").forward(req, resp);
         }
     }
