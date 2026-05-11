@@ -15,12 +15,13 @@ public class CertificateRecord {
     private String country, state, locality, organization, orgUnit, commonName, emailAddress;
     private String sanDns, sanIp;
     private LocalDateTime validFrom, validUntil;
-    private int keySize = 2048;
+    private int keySize = 4096;
     private String signatureAlgorithm = "SHA256withRSA";
     private String certificatePem, csrPem, privateKeyPem;
     private String fingerprintSha256;
     private LocalDateTime issuedAt = LocalDateTime.now();
     private String requester, notes;
+    private String downloadToken;
 
     public Long getId() { return id; }
     public void setId(Long v) { id = v; }
@@ -74,6 +75,8 @@ public class CertificateRecord {
     public void setRequester(String v) { requester = v; }
     public String getNotes() { return notes; }
     public void setNotes(String v) { notes = v; }
+    public String getDownloadToken() { return downloadToken; }
+    public void setDownloadToken(String v) { downloadToken = v; }
 
     public boolean isExpired()      { return validUntil != null && LocalDateTime.now().isAfter(validUntil); }
     public boolean isExpiringSoon() { return validUntil != null && !isExpired() && LocalDateTime.now().plusDays(30).isAfter(validUntil); }

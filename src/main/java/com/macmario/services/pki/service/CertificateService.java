@@ -1,17 +1,26 @@
 package com.macmario.services.pki.service;
 
 import com.macmario.services.pki.entity.CertificateRecord;
-import com.macmario.services.pki.entity.RevokedCertificate;
 import com.macmario.services.pki.entity.CaConfig;
 import com.macmario.services.pki.util.EntityManagerProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import org.bouncycastle.operator.OperatorCreationException;
+
+import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public class CertificateService {
     private static final Logger log = LoggerFactory.getLogger(CertificateService.class);
@@ -77,14 +86,14 @@ public class CertificateService {
         }
     }
 
-    public CertificateRecord generateAndIssue(CaConfig ca, CertificateRecord template) throws Exception {
+    public CertificateRecord generateAndIssue(CaConfig ca, CertificateRecord template) throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
         crypto.generateAndSign(ca, template);
         template.setIssuingCaId(ca.getId());
         template.setIssuingCaDisplayName(ca.getDisplayName());
         return persist(template);
     }
 
-    public CertificateRecord signExternalCsr(String csrPem, CaConfig ca, CertificateRecord template) throws Exception {
+    public CertificateRecord signExternalCsr(String csrPem, CaConfig ca, CertificateRecord template) throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
         crypto.signCsr(csrPem, ca, template);
         template.setIssuingCaId(ca.getId());
         template.setIssuingCaDisplayName(ca.getDisplayName());
@@ -122,7 +131,7 @@ public class CertificateService {
                 }
                 c.commit();
                 log.info("Certificate {} revoked by {}", serial, revokedBy);
-            } catch (Exception e) {
+            } catch (SQLException e) {
                 c.rollback();
                 throw e;
             }
@@ -130,14 +139,15 @@ public class CertificateService {
     }
 
     private CertificateRecord persist(CertificateRecord r) throws SQLException {
+        if (r.getDownloadToken() == null) r.setDownloadToken(UUID.randomUUID().toString());
         String sql = """
             INSERT INTO CERTIFICATE_RECORD
                 (issuing_ca_id,serial_number,cert_status,cert_type,
                  country,state,locality,organization,org_unit,common_name,email_address,
                  san_dns,san_ip,valid_from,valid_until,key_size,signature_algorithm,
                  certificate_pem,csr_pem,private_key_pem,fingerprint_sha256,
-                 issued_at,requester,notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 issued_at,requester,notes,download_token)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """;
         try (Connection c = EntityManagerProvider.getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -165,6 +175,7 @@ public class CertificateService {
             ps.setTimestamp(22, Timestamp.valueOf(r.getIssuedAt() != null ? r.getIssuedAt() : LocalDateTime.now()));
             ps.setString(23, r.getRequester());
             ps.setString(24, r.getNotes());
+            ps.setString(25, r.getDownloadToken());
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) r.setId(keys.getLong(1));
@@ -203,6 +214,7 @@ public class CertificateService {
             Timestamp ia = rs.getTimestamp("issued_at"); if (ia != null) r.setIssuedAt(ia.toLocalDateTime());
             r.setRequester(rs.getString("requester"));
             r.setNotes(rs.getString("notes"));
+            try { r.setDownloadToken(rs.getString("download_token")); } catch (SQLException ignored) {}
             list.add(r);
         }
         return list;

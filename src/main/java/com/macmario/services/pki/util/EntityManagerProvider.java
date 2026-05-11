@@ -3,6 +3,7 @@ package com.macmario.services.pki.util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -45,7 +46,7 @@ public class EntityManagerProvider {
             }
             initialized = true;
             log.info("H2 database initialised at {}", dataDir.toAbsolutePath());
-        } catch (Exception e) {
+        } catch (ClassNotFoundException | IOException | SQLException e) {
             throw new RuntimeException("DB init failed", e);
         }
     }
@@ -55,9 +56,18 @@ public class EntityManagerProvider {
         return DriverManager.getConnection(DB_URL, "sa", "");
     }
 
-    public static void close() {
-        log.info("DB provider shutdown.");
+    public static synchronized void close() {
+        if (!initialized) return;
         initialized = false;
+        if (DB_URL == null) return;
+        try (Connection c = DriverManager.getConnection(DB_URL, "sa", "");
+             Statement st = c.createStatement()) {
+            st.execute("SHUTDOWN");
+            log.info("H2 database shut down cleanly.");
+        } catch (SQLException e) {
+            log.warn("H2 SHUTDOWN error (may already be closed): {}", e.getMessage());
+        }
+        DB_URL = null;
     }
 
     private static void createSchema(Connection c) throws SQLException {
@@ -112,7 +122,7 @@ public class EntityManagerProvider {
                 "  san_ip              VARCHAR(500)," +
                 "  valid_from          TIMESTAMP NOT NULL," +
                 "  valid_until         TIMESTAMP NOT NULL," +
-                "  key_size            INT NOT NULL DEFAULT 2048," +
+                "  key_size            INT NOT NULL DEFAULT 4096," +
                 "  signature_algorithm VARCHAR(50) DEFAULT 'SHA256withRSA'," +
                 "  certificate_pem     CLOB," +
                 "  csr_pem             CLOB," +
@@ -146,6 +156,72 @@ public class EntityManagerProvider {
                 "  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
                 ")"
             );
+
+            st.execute(
+                "CREATE TABLE IF NOT EXISTS PKI_USER (" +
+                "  id            BIGINT AUTO_INCREMENT PRIMARY KEY," +
+                "  username      VARCHAR(100) NOT NULL UNIQUE," +
+                "  password_hash VARCHAR(200) NOT NULL," +
+                "  salt          VARCHAR(100) NOT NULL," +
+                "  display_name  VARCHAR(200)," +
+                "  email         VARCHAR(200)," +
+                "  role          VARCHAR(20) NOT NULL DEFAULT 'VIEWER'," +
+                "  active        BOOLEAN NOT NULL DEFAULT TRUE," +
+                "  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                "  last_login_at TIMESTAMP" +
+                ")"
+            );
+
+            st.execute(
+                "CREATE TABLE IF NOT EXISTS CSR_REQUEST (" +
+                "  id               BIGINT AUTO_INCREMENT PRIMARY KEY," +
+                "  tracking_token   VARCHAR(36) NOT NULL UNIQUE," +
+                "  csr_pem          CLOB NOT NULL," +
+                "  subject_cn       VARCHAR(300)," +
+                "  requester_name   VARCHAR(200)," +
+                "  requester_email  VARCHAR(200)," +
+                "  requester_notes  CLOB," +
+                "  status           VARCHAR(20) NOT NULL DEFAULT 'PENDING'," +
+                "  requested_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                "  processed_at     TIMESTAMP," +
+                "  signed_cert_id   BIGINT," +
+                "  signed_ca_id     BIGINT," +
+                "  admin_notes      CLOB" +
+                ")"
+            );
+
+            st.execute(
+                "CREATE TABLE IF NOT EXISTS ACME_CERTIFICATE (" +
+                "  id               BIGINT AUTO_INCREMENT PRIMARY KEY," +
+                "  domain           VARCHAR(253) NOT NULL UNIQUE," +
+                "  account_url      VARCHAR(500)," +
+                "  account_key_pem  CLOB," +
+                "  cert_pem         CLOB," +
+                "  chain_pem        CLOB," +
+                "  private_key_pem  CLOB," +
+                "  valid_from       TIMESTAMP," +
+                "  valid_until      TIMESTAMP," +
+                "  auto_renew       BOOLEAN NOT NULL DEFAULT TRUE," +
+                "  last_renewed_at  TIMESTAMP," +
+                "  status           VARCHAR(20) NOT NULL DEFAULT 'PENDING'," +
+                "  error_message    CLOB," +
+                "  created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+                ")"
+            );
+
+            st.execute(
+                "CREATE TABLE IF NOT EXISTS ACME_CHALLENGE_TOKEN (" +
+                "  token       VARCHAR(100) PRIMARY KEY," +
+                "  key_auth    VARCHAR(500) NOT NULL," +
+                "  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+                ")"
+            );
+
+            // Idempotent column additions for existing installs
+            try { st.execute("ALTER TABLE CERTIFICATE_RECORD ADD COLUMN IF NOT EXISTS download_token VARCHAR(36)"); }
+            catch (Exception ignored) {}
+            try { st.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_cert_download_token ON CERTIFICATE_RECORD(download_token)"); }
+            catch (Exception ignored) {}
 
             log.info("Database schema ready.");
         }

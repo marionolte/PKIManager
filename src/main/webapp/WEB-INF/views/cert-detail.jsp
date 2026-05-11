@@ -1,12 +1,15 @@
 <%@ page contentType="text/html;charset=UTF-8" %>
-<%@ page import="com.macmario.services.pki.entity.CertificateRecord, com.macmario.services.pki.entity.RevokedCertificate" %>
+<%@ page import="com.macmario.services.pki.entity.CertificateRecord, com.macmario.services.pki.entity.RevokedCertificate, com.macmario.services.pki.entity.PkiUser" %>
 <%! private String e(String s){if(s==null)return "";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");} %>
 <% CertificateRecord cert=(CertificateRecord)request.getAttribute("cert");
    RevokedCertificate.RevocationReason[] reasons=(RevokedCertificate.RevocationReason[])request.getAttribute("revocationReasons");
    String ctx=request.getContextPath();
    String error=(String)request.getAttribute("error");
+   PkiUser me=(PkiUser)session.getAttribute("currentUser");
    if(cert==null){response.sendError(404);return;}
-   String stBadge=cert.getCertStatus()==CertificateRecord.CertStatus.VALID?"badge-valid":"badge-revoked"; %>
+   String stBadge=cert.getCertStatus()==CertificateRecord.CertStatus.VALID?"badge-valid":"badge-revoked";
+   String baseUrl=request.getScheme()+"://"+request.getServerName()+(request.getServerPort()!=80&&request.getServerPort()!=443?":"+request.getServerPort():"");
+%>
 <!DOCTYPE html><html lang="de">
 <head><meta charset="UTF-8"/><title>PKI Manager – <%=e(cert.getCommonName())%></title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
@@ -45,7 +48,18 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">Certificates</div>
     <a href="<%=ctx%>/cert" class="nav-link active"><i class="bi bi-file-earmark-lock2"></i>All Certificates</a>
     <a href="<%=ctx%>/cert/issue" class="nav-link"><i class="bi bi-plus-circle-dotted"></i>Issue Certificate</a>
+    <div class="nav-sect mt-2">Requests</div>
+    <a href="<%=ctx%>/admin/csr-jobs" class="nav-link"><i class="bi bi-inbox"></i>CSR Jobs</a>
+    <div class="nav-sect mt-2">Administration</div>
+    <a href="<%=ctx%>/admin/users/" class="nav-link"><i class="bi bi-people"></i>Users</a>
+    <a href="<%=ctx%>/admin/acme" class="nav-link"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
   </nav>
+  <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
+    <i class="bi bi-person-circle me-1"></i><%=me!=null?e(me.getDisplayName()):""%>
+    <form method="post" action="<%=ctx%>/logout" class="d-inline ms-2">
+      <button class="btn btn-link btn-sm p-0 text-danger" style="font-size:.72rem;"><i class="bi bi-box-arrow-right"></i> Logout</button>
+    </form>
+  </div>
 </div>
 <div class="main-content">
   <div class="topbar">
@@ -124,6 +138,18 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
           <a href="<%=ctx%>/cert/<%=cert.getId()%>/download.pem" class="btn btn-sm btn-outline-success mt-2"><i class="bi bi-download me-1"></i>Download cert.pem</a>
           <% } %>
         </div>
+        <% if(cert.getDownloadToken()!=null){ %>
+        <div class="info-card mb-4">
+          <h6 class="fw-bold mb-3"><i class="bi bi-link-45deg me-2 text-primary"></i>Public Download Link</h6>
+          <p style="font-size:.82rem;color:#555;" class="mb-2">Share this link to let anyone download the certificate without a login:</p>
+          <div class="input-group input-group-sm mb-2">
+            <input type="text" class="form-control font-monospace" id="dlLink"
+                   value="<%=baseUrl+ctx+"/public/download/"+cert.getDownloadToken()%>" readonly style="font-size:.72rem;"/>
+            <button class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('dlLink').value);this.textContent='Copied!'">Copy</button>
+          </div>
+          <a href="<%=ctx%>/public/download/<%=cert.getDownloadToken()%>" class="btn btn-sm btn-outline-primary"><i class="bi bi-download me-1"></i>Test link</a>
+        </div>
+        <% } %>
         <% if(cert.getPrivateKeyPem()!=null&&!cert.getPrivateKeyPem().isEmpty()){ %>
         <div class="info-card">
           <h6 class="fw-bold mb-3"><i class="bi bi-key me-2 text-warning"></i>Private Key</h6>

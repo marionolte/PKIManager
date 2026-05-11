@@ -5,6 +5,10 @@ import com.macmario.services.pki.util.EntityManagerProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.bouncycastle.operator.OperatorCreationException;
+
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -55,14 +59,14 @@ public class CaService {
         }
     }
 
-    public CaConfig createRootCa(CaConfig ca) throws Exception {
+    public CaConfig createRootCa(CaConfig ca) throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
         ca.setCaType(CaConfig.CaType.ROOT);
         ca.setParentCaId(null);
         crypto.initRootCa(ca);
         return persist(ca);
     }
 
-    public CaConfig createSubCa(CaConfig ca, Long parentCaId) throws Exception {
+    public CaConfig createSubCa(CaConfig ca, Long parentCaId) throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
         CaConfig parent = findById(parentCaId)
             .orElseThrow(() -> new IllegalArgumentException("Parent CA not found: " + parentCaId));
         ca.setCaType(CaConfig.CaType.INTERMEDIATE);
@@ -71,7 +75,7 @@ public class CaService {
         return persist(ca);
     }
 
-    public CaConfig createIssuingCa(CaConfig ca, Long parentCaId) throws Exception {
+    public CaConfig createIssuingCa(CaConfig ca, Long parentCaId) throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
         CaConfig parent = findById(parentCaId)
             .orElseThrow(() -> new IllegalArgumentException("Parent CA not found: " + parentCaId));
         ca.setCaType(CaConfig.CaType.ISSUING);
