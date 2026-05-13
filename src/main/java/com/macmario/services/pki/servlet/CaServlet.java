@@ -73,6 +73,8 @@ public class CaServlet extends HttpServlet {
                 String caType = req.getParameter("caType");
                 String parentId = req.getParameter("parentCaId");
                 CaConfig ca = buildFromRequest(req);
+                if (!"ROOT".equals(caType) && (parentId == null || parentId.isBlank()))
+                    throw new IllegalArgumentException("A parent CA must be selected for INTERMEDIATE and ISSUING CAs");
                 CaConfig saved;
                 if ("ROOT".equals(caType))          saved = caService.createRootCa(ca);
                 else if ("INTERMEDIATE".equals(caType)) saved = caService.createSubCa(ca, Long.parseLong(parentId));

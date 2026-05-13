@@ -22,6 +22,7 @@ public class CertificateRecord {
     private LocalDateTime issuedAt = LocalDateTime.now();
     private String requester, notes;
     private String downloadToken;
+    private Long apiClientId;
 
     public Long getId() { return id; }
     public void setId(Long v) { id = v; }
@@ -31,7 +32,10 @@ public class CertificateRecord {
     public void setIssuingCaDisplayName(String v) { issuingCaDisplayName = v; }
     public String getSerialNumber() { return serialNumber; }
     public void setSerialNumber(String v) { serialNumber = v; }
-    public CertStatus getCertStatus() { return certStatus; }
+    public CertStatus getCertStatus() {
+        if (certStatus == CertStatus.VALID && isExpired()) return CertStatus.EXPIRED;
+        return certStatus;
+    }
     public void setCertStatus(CertStatus v) { certStatus = v; }
     public CertType getCertType() { return certType; }
     public void setCertType(CertType v) { certType = v; }
@@ -77,6 +81,8 @@ public class CertificateRecord {
     public void setNotes(String v) { notes = v; }
     public String getDownloadToken() { return downloadToken; }
     public void setDownloadToken(String v) { downloadToken = v; }
+    public Long getApiClientId() { return apiClientId; }
+    public void setApiClientId(Long v) { apiClientId = v; }
 
     public boolean isExpired()      { return validUntil != null && LocalDateTime.now().isAfter(validUntil); }
     public boolean isExpiringSoon() { return validUntil != null && !isExpired() && LocalDateTime.now().plusDays(30).isAfter(validUntil); }

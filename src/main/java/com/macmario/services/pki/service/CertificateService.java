@@ -56,23 +56,37 @@ public class CertificateService {
         }
     }
 
+    public List<CertificateRecord> findByApiClient(Long apiClientId) throws SQLException {
+        try (Connection c = EntityManagerProvider.getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                "SELECT r.*, a.display_name AS ca_name FROM CERTIFICATE_RECORD r " +
+                "JOIN CA_CONFIG a ON r.issuing_ca_id=a.id WHERE r.api_client_id=? ORDER BY r.issued_at DESC")) {
+            ps.setLong(1, apiClientId);
+            return mapList(ps.executeQuery());
+        }
+    }
+
     public List<CertificateRecord> findExpiringSoon(int days) throws SQLException {
-        LocalDateTime threshold = LocalDateTime.now().plusDays(days);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime threshold = now.plusDays(days);
         try (Connection c = EntityManagerProvider.getConnection();
              PreparedStatement ps = c.prepareStatement(
                 "SELECT r.*, a.display_name AS ca_name FROM CERTIFICATE_RECORD r " +
                 "JOIN CA_CONFIG a ON r.issuing_ca_id=a.id " +
-                "WHERE r.cert_status='VALID' AND r.valid_until <= ? ORDER BY r.valid_until")) {
-            ps.setTimestamp(1, Timestamp.valueOf(threshold));
+                "WHERE r.cert_status='VALID' AND r.valid_until > ? AND r.valid_until <= ? ORDER BY r.valid_until")) {
+            ps.setTimestamp(1, Timestamp.valueOf(now));
+            ps.setTimestamp(2, Timestamp.valueOf(threshold));
             return mapList(ps.executeQuery());
         }
     }
 
     public long countByStatus(String status) throws SQLException {
+        String sql = "VALID".equals(status)
+            ? "SELECT COUNT(*) FROM CERTIFICATE_RECORD WHERE cert_status='VALID' AND valid_until > CURRENT_TIMESTAMP"
+            : "SELECT COUNT(*) FROM CERTIFICATE_RECORD WHERE cert_status=?";
         try (Connection c = EntityManagerProvider.getConnection();
-             PreparedStatement ps = c.prepareStatement(
-                "SELECT COUNT(*) FROM CERTIFICATE_RECORD WHERE cert_status=?")) {
-            ps.setString(1, status);
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            if (!"VALID".equals(status)) ps.setString(1, status);
             ResultSet rs = ps.executeQuery();
             return rs.next() ? rs.getLong(1) : 0;
         }
@@ -146,8 +160,8 @@ public class CertificateService {
                  country,state,locality,organization,org_unit,common_name,email_address,
                  san_dns,san_ip,valid_from,valid_until,key_size,signature_algorithm,
                  certificate_pem,csr_pem,private_key_pem,fingerprint_sha256,
-                 issued_at,requester,notes,download_token)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 issued_at,requester,notes,download_token,api_client_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """;
         try (Connection c = EntityManagerProvider.getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -176,6 +190,8 @@ public class CertificateService {
             ps.setString(23, r.getRequester());
             ps.setString(24, r.getNotes());
             ps.setString(25, r.getDownloadToken());
+            if (r.getApiClientId() != null) ps.setLong(26, r.getApiClientId());
+            else ps.setNull(26, java.sql.Types.BIGINT);
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) r.setId(keys.getLong(1));
@@ -215,6 +231,8 @@ public class CertificateService {
             r.setRequester(rs.getString("requester"));
             r.setNotes(rs.getString("notes"));
             try { r.setDownloadToken(rs.getString("download_token")); } catch (SQLException ignored) {}
+            try { long acId = rs.getLong("api_client_id"); if (!rs.wasNull()) r.setApiClientId(acId); }
+            catch (SQLException ignored) {}
             list.add(r);
         }
         return list;

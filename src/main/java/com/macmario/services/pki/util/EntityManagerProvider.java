@@ -217,10 +217,27 @@ public class EntityManagerProvider {
                 ")"
             );
 
+            st.execute(
+                "CREATE TABLE IF NOT EXISTS API_CLIENT (" +
+                "  id            BIGINT AUTO_INCREMENT PRIMARY KEY," +
+                "  name          VARCHAR(100) NOT NULL UNIQUE," +
+                "  api_key       VARCHAR(64)  NOT NULL UNIQUE," +
+                "  description   VARCHAR(500)," +
+                "  active        BOOLEAN NOT NULL DEFAULT TRUE," +
+                "  default_ca_id BIGINT," +
+                "  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                "  FOREIGN KEY (default_ca_id) REFERENCES CA_CONFIG(id)" +
+                ")"
+            );
+
             // Idempotent column additions for existing installs
             try { st.execute("ALTER TABLE CERTIFICATE_RECORD ADD COLUMN IF NOT EXISTS download_token VARCHAR(36)"); }
             catch (Exception ignored) {}
             try { st.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_cert_download_token ON CERTIFICATE_RECORD(download_token)"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE CERTIFICATE_RECORD ADD COLUMN IF NOT EXISTS api_client_id BIGINT"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE CSR_REQUEST ADD COLUMN IF NOT EXISTS api_client_id BIGINT"); }
             catch (Exception ignored) {}
 
             log.info("Database schema ready.");

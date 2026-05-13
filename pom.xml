@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.macmario.services</groupId>
     <artifactId>macmario-service-PKIManager</artifactId>
-    <version>1.1</version>
+    <version>1.2</version>
     <packaging>war</packaging>
     <dependencies>
         <dependency>

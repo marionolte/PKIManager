@@ -28,7 +28,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 .table-card .table thead th{border:none;padding:.9rem 1rem;font-weight:500;}
 .table-card .table tbody td{padding:.75rem 1rem;vertical-align:middle;font-size:.875rem;border-color:#f0f0f0;}
 .table-card .table tbody tr:hover{background:#f7faff;}
-.badge-valid{background:#d1fae5;color:#065f46;} .badge-revoked{background:#fee2e2;color:#991b1b;}
+.badge-valid{background:#d1fae5;color:#065f46;} .badge-revoked{background:#fee2e2;color:#991b1b;} .badge-expired{background:#fef3c7;color:#92400e;}
 </style></head>
 <body>
 <div class="sidebar">
@@ -49,6 +49,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">Administration</div>
     <a href="<%=ctx%>/admin/users/" class="nav-link"><i class="bi bi-people"></i>Users</a>
     <a href="<%=ctx%>/admin/acme" class="nav-link"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
+    <a href="<%=ctx%>/admin/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
   </nav>
   <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
     <i class="bi bi-person-circle me-1"></i><%=me!=null?me.getDisplayName():""%>
@@ -79,7 +80,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
         <tbody>
 <% for (CertificateRecord cert : certs) {
    boolean warn = cert.isExpiringSoon(); boolean exp = cert.isExpired();
-   String stBadge = cert.getCertStatus()==CertificateRecord.CertStatus.VALID?"badge-valid":"badge-revoked";
+   String stBadge = cert.getCertStatus()==CertificateRecord.CertStatus.VALID?"badge-valid":cert.getCertStatus()==CertificateRecord.CertStatus.EXPIRED?"badge-expired":"badge-revoked";
 %>
           <tr>
             <td class="fw-semibold">
