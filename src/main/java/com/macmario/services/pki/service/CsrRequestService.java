@@ -18,6 +18,36 @@ import java.util.UUID;
 
 public class CsrRequestService {
 
+    public CsrRequest submitForApiClient(String csrPem, String requesterName, String requesterEmail,
+                                          String notes, Long apiClientId) throws SQLException {
+        CsrRequest r = submit(csrPem, requesterName, requesterEmail, notes);
+        if (apiClientId != null) {
+            try (Connection c = EntityManagerProvider.getConnection();
+                 PreparedStatement ps = c.prepareStatement(
+                     "UPDATE CSR_REQUEST SET api_client_id=? WHERE id=?")) {
+                ps.setLong(1, apiClientId);
+                ps.setLong(2, r.getId());
+                ps.executeUpdate();
+            }
+            r.setApiClientId(apiClientId);
+        }
+        return r;
+    }
+
+    public List<CsrRequest> findByApiClient(Long apiClientId) throws SQLException {
+        List<CsrRequest> list = new ArrayList<>();
+        try (Connection c = EntityManagerProvider.getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                 "SELECT r.*, ca.display_name as ca_name FROM CSR_REQUEST r " +
+                 "LEFT JOIN CA_CONFIG ca ON ca.id=r.signed_ca_id " +
+                 "WHERE r.api_client_id=? ORDER BY r.requested_at DESC")) {
+            ps.setLong(1, apiClientId);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) list.add(map(rs));
+        }
+        return list;
+    }
+
     public CsrRequest submit(String csrPem, String requesterName, String requesterEmail, String notes) throws SQLException {
         String cn = extractCn(csrPem);
         String token = UUID.randomUUID().toString();
@@ -165,6 +195,8 @@ public class CsrRequestService {
         long caId   = rs.getLong("signed_ca_id");   if (!rs.wasNull()) r.setSignedCaId(caId);
         r.setAdminNotes(rs.getString("admin_notes"));
         try { r.setIssuingCaName(rs.getString("ca_name")); } catch (SQLException ignored) {}
+        try { long acId = rs.getLong("api_client_id"); if (!rs.wasNull()) r.setApiClientId(acId); }
+        catch (SQLException ignored) {}
         return r;
     }
 }

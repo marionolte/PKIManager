@@ -5,9 +5,11 @@ import com.macmario.services.pki.util.EntityManagerProvider;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
 import jakarta.servlet.annotation.WebListener;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.security.Security;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
@@ -38,6 +40,8 @@ public class AppStartupListener implements ServletContextListener {
     public void contextDestroyed(ServletContextEvent sce) {
         log.info("=== PKI Manager shutting down ===");
         EntityManagerProvider.close();
+        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+        log.info("Removed BouncyCastle security provider");
         ClassLoader cl = Thread.currentThread().getContextClassLoader();
         Enumeration<Driver> drivers = DriverManager.getDrivers();
         while (drivers.hasMoreElements()) {

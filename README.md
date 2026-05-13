@@ -95,6 +95,69 @@ Register a public domain and obtain a trusted TLS certificate from Let's Encrypt
 Both Let's Encrypt **production** and **staging** environments are supported.
 EC P-256 account keys and ES256 JWS signing are used throughout the ACME flow.
 
+### Application API (API Clients)
+External applications can integrate with PKI Manager via a REST API using per-application API keys.
+No user session is required — authentication is done with a static key passed in the `X-API-Key` header.
+
+**Isolation:** each API client can only see and download its own certificates.
+CA management (create, enable, disable) is fully blocked for API clients.
+
+#### Setting up an API client
+1. Open *Administration → API Clients* and click **New API Client**.
+2. Enter a name, optional description, and optionally pre-select a default issuing CA.
+3. After creation the full API key is shown **once** — copy it immediately.
+4. Pass the key on every API request: `X-API-Key: pki_<key>`
+
+#### Issuing a certificate (server generates key pair)
+```http
+POST /pki-manager/api/v1/certs
+X-API-Key: pki_<key>
+Content-Type: application/json
+
+{
+  "commonName": "app.example.com",
+  "certType": "SERVER",
+  "sanDns": "app.example.com,www.example.com",
+  "organization": "ACME Corp",
+  "keySize": 2048,
+  "caId": 3
+}
+```
+Response `201` includes `certificatePem` and `privateKeyPem` (only returned at creation).
+
+#### Auto-signing an external CSR
+```http
+POST /pki-manager/api/v1/certs/sign
+X-API-Key: pki_<key>
+Content-Type: application/json
+
+{
+  "csrPem": "-----BEGIN CERTIFICATE REQUEST-----\n...",
+  "certType": "SERVER",
+  "caId": 3
+}
+```
+The CSR is signed immediately and a `CERTIFICATE_RECORD` is returned.
+The signing is also recorded in the CSR job queue for audit purposes.
+
+#### API endpoints
+All endpoints require `X-API-Key` header. Base path: `/pki-manager/api/v1/`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/cas` | List active issuing CAs (for reference) |
+| `GET` | `/certs` | List own certificates |
+| `POST` | `/certs` | Issue certificate (PKI Manager generates key pair) |
+| `POST` | `/certs/sign` | Auto-sign external CSR, returns certificate immediately |
+| `GET` | `/certs/{id}` | Certificate details (own only) |
+| `GET` | `/certs/{id}/pem` | Download certificate PEM (own only) |
+| `GET` | `/csr` | List own CSR signing jobs |
+| `GET` | `/csr/{id}` | CSR job status (own only) |
+
+All responses are JSON. Errors return `{"error": "message"}` with an appropriate HTTP status code.
+
+If a default CA is configured on the API client, `caId` can be omitted from requests.
+
 ### Dashboard
 `/pki-manager/dashboard` shows:
 - Total / valid / revoked certificate counts
@@ -250,6 +313,26 @@ On first startup PKI Manager creates a default administrator account:
 | `POST /pki-manager/admin/acme/register` | Register domain for ACME |
 | `POST /pki-manager/admin/acme/{id}/request` | Trigger certificate request (async) |
 | `POST /pki-manager/admin/acme/{id}/delete` | Remove ACME entry |
+| `GET /pki-manager/admin/api-clients/` | API client list |
+| `POST /pki-manager/admin/api-clients/create` | Create API client (generates key) |
+| `GET /pki-manager/admin/api-clients/{id}/edit` | Edit API client form |
+| `POST /pki-manager/admin/api-clients/{id}` | Update API client |
+| `POST /pki-manager/admin/api-clients/{id}/enable` | Enable API client |
+| `POST /pki-manager/admin/api-clients/{id}/disable` | Disable API client |
+| `POST /pki-manager/admin/api-clients/{id}/rotate` | Rotate API key |
+| `POST /pki-manager/admin/api-clients/{id}/delete` | Delete API client |
+
+### API (application access, no session required)
+| URL | Description |
+|---|---|
+| `GET /pki-manager/api/v1/cas` | List active issuing CAs |
+| `GET /pki-manager/api/v1/certs` | List own certificates |
+| `POST /pki-manager/api/v1/certs` | Issue certificate (server generates key pair) |
+| `POST /pki-manager/api/v1/certs/sign` | Auto-sign external CSR |
+| `GET /pki-manager/api/v1/certs/{id}` | Certificate details (own only) |
+| `GET /pki-manager/api/v1/certs/{id}/pem` | Download certificate PEM (own only) |
+| `GET /pki-manager/api/v1/csr` | List own CSR jobs |
+| `GET /pki-manager/api/v1/csr/{id}` | CSR job status (own only) |
 
 ---
 
@@ -259,13 +342,15 @@ On first startup PKI Manager creates a default administrator account:
 src/main/java/com/macmario/services/pki/
 ├── filter/
 │   ├── AppStartupListener.java   WebListener — DB init, default config and admin seed
-│   └── AuthFilter.java           WebFilter  — session check, redirects to /login
+│   ├── AuthFilter.java           WebFilter  — session check, redirects to /login
+│   └── ApiAuthFilter.java        WebFilter  — API key validation for /api/*
 ├── entity/                       Plain Java beans (no JPA)
 │   ├── CaConfig.java
 │   ├── CertificateRecord.java
 │   ├── RevokedCertificate.java
 │   ├── CsrRequest.java
 │   ├── AcmeCertificate.java
+│   ├── ApiClient.java
 │   └── PkiUser.java
 ├── service/
 │   ├── CaService.java            CA CRUD + status management
@@ -273,6 +358,7 @@ src/main/java/com/macmario/services/pki/
 │   ├── PkiCryptoService.java     Bouncy Castle: key gen, CA init, CSR signing
 │   ├── CsrRequestService.java    CSR submission queue
 │   ├── UserService.java          PBKDF2 auth, user CRUD
+│   ├── ApiClientService.java     API client CRUD + key generation/rotation
 │   └── AcmeClientService.java    Full ACME v2 client (RFC 8555, ES256)
 ├── servlet/                      @WebServlet annotation-based routing
 │   ├── DashboardServlet.java
@@ -284,7 +370,9 @@ src/main/java/com/macmario/services/pki/
 │   ├── CsrJobServlet.java
 │   ├── UserAdminServlet.java
 │   ├── AcmeMgmtServlet.java
-│   └── AcmeChallengeServlet.java
+│   ├── AcmeChallengeServlet.java
+│   ├── ApiServlet.java           REST API for external applications (/api/v1/*)
+│   └── ApiClientAdminServlet.java  Admin UI for API client management
 └── util/
     └── EntityManagerProvider.java  Raw JDBC, H2 connection pool, schema creation
 ```
@@ -294,7 +382,7 @@ src/main/java/com/macmario/services/pki/
 - Bouncy Castle 1.84 (`bcprov-jdk18on`, `bcpkix-jdk18on`) — all cryptography
 - H2 2.4 embedded database — `AUTO_SERVER=TRUE`, persisted to disk
 - Bootstrap 5.3 + Bootstrap Icons 1.11 — UI (CDN)
-- Gson 2.11 — ACME JSON parsing
+- Gson 2.11 — ACME JSON parsing + API request/response serialization
 - `java.net.http.HttpClient` — ACME HTTP calls
 
 ---
@@ -313,13 +401,14 @@ Schema is created automatically via `EntityManagerProvider.createSchema()`.
 | Table | Contents |
 |---|---|
 | `CA_CONFIG` | CA records: type, subject DN, PEM cert + private key, validity |
-| `CERTIFICATE_RECORD` | Issued certificates: status, type, subject DN, SANs, PEM cert + optional private key, download token |
+| `CERTIFICATE_RECORD` | Issued certificates: status, type, subject DN, SANs, PEM cert + optional private key, download token, `api_client_id` |
 | `REVOKED_CERTIFICATE` | Revocation audit trail: reason, timestamp, operator |
 | `PKI_CONFIGURATION` | Key-value runtime settings (`crl.validity.days`, `cert.expiry.warn.days`, etc.) |
 | `PKI_USER` | User accounts: PBKDF2 password hash + salt, role, active flag |
-| `CSR_REQUEST` | CSR submission queue: PEM, requester details, status, tracking token |
+| `CSR_REQUEST` | CSR submission queue: PEM, requester details, status, tracking token, `api_client_id` |
 | `ACME_CERTIFICATE` | ACME-managed certificates: domain, account key, cert PEM, renewal status |
 | `ACME_CHALLENGE_TOKEN` | Short-lived HTTP-01 challenge tokens served during ACME flow |
+| `API_CLIENT` | API client records: name, hashed API key, default CA, active flag |
 
 ---
 
@@ -328,8 +417,12 @@ Schema is created automatically via `EntityManagerProvider.createSchema()`.
 - **Change the default admin password** (`admin` / `admin`) immediately after first login.
 - Private keys are stored **unencrypted** in the H2 database. Protect the database file
   (`$CATALINA_BASE/pki-data/`) with appropriate OS file permissions.
-- There is no rate limiting on the login endpoint. Place a reverse proxy (nginx, Apache)
+- There is no rate limiting on the login or API endpoints. Place a reverse proxy (nginx, Apache)
   in front of Tomcat for production use.
+- API keys are stored in plain text in the H2 database (same threat model as private keys).
+  Treat the `pki-data/` directory as a secret. Rotate keys immediately if they are exposed.
+- API clients are strictly scoped: they cannot access CA management or other clients' certificates.
+  Enforce network-level restrictions so the API port is not publicly reachable if not required.
 - The ACME flow requires the server to be reachable from the internet on port 80 for HTTP-01
   challenges. Use staging (`Let's Encrypt Staging`) to test without hitting rate limits.
 - Session timeout is 60 minutes (configurable in `LoginServlet`).

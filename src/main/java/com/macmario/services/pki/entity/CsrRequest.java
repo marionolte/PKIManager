@@ -19,6 +19,7 @@ public class CsrRequest {
     private Long signedCaId;
     private String adminNotes;
     private String issuingCaName;
+    private Long apiClientId;
 
     public Long getId() { return id; }
     public void setId(Long v) { id = v; }
@@ -48,4 +49,6 @@ public class CsrRequest {
     public void setAdminNotes(String v) { adminNotes = v; }
     public String getIssuingCaName() { return issuingCaName; }
     public void setIssuingCaName(String v) { issuingCaName = v; }
+    public Long getApiClientId() { return apiClientId; }
+    public void setApiClientId(Long v) { apiClientId = v; }
 }

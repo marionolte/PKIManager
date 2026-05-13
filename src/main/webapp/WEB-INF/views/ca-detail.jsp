@@ -42,7 +42,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 .dr{display:flex;gap:.5rem;padding:.4rem 0;border-bottom:1px solid #f5f5f5;font-size:.875rem;}
 .dl{min-width:160px;color:#888;font-size:.8rem;font-weight:500;}
 .cert-pem{font-family:'Courier New',monospace;font-size:.72rem;background:#f1f5f9;color:#1e293b;border:1px solid #dde4ee;border-radius:8px;padding:1rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;}
-.badge-valid{background:#d1fae5;color:#065f46;} .badge-revoked{background:#fee2e2;color:#991b1b;}
+.badge-valid{background:#d1fae5;color:#065f46;} .badge-revoked{background:#fee2e2;color:#991b1b;} .badge-expired{background:#fef3c7;color:#92400e;}
 .badge-root{background:#dbeafe;color:#1e40af;} .badge-inter{background:#ede9fe;color:#5b21b6;} .badge-issuing{background:#d1fae5;color:#065f46;}
 </style></head>
 <body>
@@ -64,6 +64,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">Administration</div>
     <a href="<%=ctx%>/admin/users/" class="nav-link"><i class="bi bi-people"></i>Users</a>
     <a href="<%=ctx%>/admin/acme" class="nav-link"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
+    <a href="<%=ctx%>/admin/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
   </nav>
   <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
     <i class="bi bi-person-circle me-1"></i><%=me!=null?e(me.getDisplayName()):""%>
@@ -179,7 +180,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
           <thead><tr><th>Common Name</th><th>Type</th><th>Serial</th><th>Valid Until</th><th>Status</th><th></th></tr></thead>
           <tbody>
           <% for(CertificateRecord cert:certs){
-             String stBadge=cert.getCertStatus()==CertificateRecord.CertStatus.VALID?"badge-valid":"badge-revoked"; %>
+             String stBadge=cert.getCertStatus()==CertificateRecord.CertStatus.VALID?"badge-valid":cert.getCertStatus()==CertificateRecord.CertStatus.EXPIRED?"badge-expired":"badge-revoked"; %>
           <tr>
             <td class="fw-semibold"><a href="<%=ctx%>/cert/<%=cert.getId()%>" class="text-decoration-none"><%=e(cert.getCommonName())%></a></td>
             <td><span class="badge bg-secondary bg-opacity-75 text-white" style="font-size:.68rem;"><%=cert.getCertType()%></span></td>

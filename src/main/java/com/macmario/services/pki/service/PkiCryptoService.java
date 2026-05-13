@@ -51,9 +51,10 @@ public class PkiCryptoService {
     private static final Logger log = LoggerFactory.getLogger(PkiCryptoService.class);
 
     static {
-        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
-            Security.addProvider(new BouncyCastleProvider());
-        }
+        // Always replace: a stale provider from a previous webapp classloader would
+        // cause ClassNotFoundException on hot-redeploy.
+        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+        Security.addProvider(new BouncyCastleProvider());
     }
 
     // ──────────────────────────────────────────
