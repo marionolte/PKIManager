@@ -1,6 +1,8 @@
 package com.macmario.services.pki.servlet;
 
 import com.macmario.services.pki.entity.CaConfig;
+import com.macmario.services.pki.entity.PkiUser;
+import com.macmario.services.pki.entity.RevokedCertificate;
 import com.macmario.services.pki.service.CaService;
 import com.macmario.services.pki.service.CertificateService;
 import jakarta.servlet.ServletException;
@@ -46,6 +48,8 @@ public class CaServlet extends HttpServlet {
                 req.setAttribute("children",     caService.findChildren(id));
                 req.setAttribute("certificates", certService.findByCa(id));
                 req.setAttribute("certCount",    certService.countTotal());
+                req.setAttribute("issuedCount",  caService.countIssuedCerts(id));
+                req.setAttribute("revocationReasons", RevokedCertificate.RevocationReason.values());
             } catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.getRequestDispatcher("/WEB-INF/views/ca-detail.jsp").forward(req, resp);
         } else if (path.matches("/\\d+/cert\\.pem")) {
@@ -68,31 +72,106 @@ public class CaServlet extends HttpServlet {
             throws ServletException, IOException {
         String path = req.getPathInfo();
         if (path == null) path = "/";
+
+        if (path.equals("/create")) {
+            handleCreate(req, resp);
+        } else if (path.matches("/\\d+/disable")) {
+            handleStatusChange(req, resp, idFrom(path, "/disable"), "disable");
+        } else if (path.matches("/\\d+/enable")) {
+            handleStatusChange(req, resp, idFrom(path, "/enable"), "enable");
+        } else if (path.matches("/\\d+/revoke")) {
+            handleRevoke(req, resp, idFrom(path, "/revoke"));
+        } else if (path.matches("/\\d+/delete")) {
+            handleDelete(req, resp, idFrom(path, "/delete"));
+        } else {
+            resp.sendError(404);
+        }
+    }
+
+    private long idFrom(String path, String suffix) {
+        return Long.parseLong(path.substring(1, path.indexOf(suffix)));
+    }
+
+    private void handleCreate(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
         try {
-            if (path.equals("/create")) {
-                String caType = req.getParameter("caType");
-                String parentId = req.getParameter("parentCaId");
-                CaConfig ca = buildFromRequest(req);
-                if (!"ROOT".equals(caType) && (parentId == null || parentId.isBlank()))
-                    throw new IllegalArgumentException("A parent CA must be selected for INTERMEDIATE and ISSUING CAs");
-                CaConfig saved;
-                if ("ROOT".equals(caType))          saved = caService.createRootCa(ca);
-                else if ("INTERMEDIATE".equals(caType)) saved = caService.createSubCa(ca, Long.parseLong(parentId));
-                else                                saved = caService.createIssuingCa(ca, Long.parseLong(parentId));
-                resp.sendRedirect(req.getContextPath() + "/ca/" + saved.getId());
-            } else if (path.matches("/\\d+/disable")) {
-                caService.disable(Long.parseLong(path.substring(1, path.indexOf("/disable"))));
-                resp.sendRedirect(req.getContextPath() + "/ca/" + path.substring(1, path.indexOf("/disable")));
-            } else if (path.matches("/\\d+/enable")) {
-                caService.enable(Long.parseLong(path.substring(1, path.indexOf("/enable"))));
-                resp.sendRedirect(req.getContextPath() + "/ca/" + path.substring(1, path.indexOf("/enable")));
-            } else { resp.sendError(404); }
+            String caType = req.getParameter("caType");
+            String parentId = req.getParameter("parentCaId");
+            CaConfig ca = buildFromRequest(req);
+            if (!"ROOT".equals(caType) && (parentId == null || parentId.isBlank()))
+                throw new IllegalArgumentException("A parent CA must be selected for INTERMEDIATE and ISSUING CAs");
+            CaConfig saved;
+            if ("ROOT".equals(caType))              saved = caService.createRootCa(ca);
+            else if ("INTERMEDIATE".equals(caType)) saved = caService.createSubCa(ca, Long.parseLong(parentId));
+            else                                    saved = caService.createIssuingCa(ca, Long.parseLong(parentId));
+            resp.sendRedirect(req.getContextPath() + "/ca/" + saved.getId());
         } catch (GeneralSecurityException | OperatorCreationException | IOException | SQLException | IllegalArgumentException e) {
-            log.error("CA operation failed", e);
+            log.error("CA creation failed", e);
             req.setAttribute("error", e.getMessage());
             try { req.setAttribute("allCas", caService.findAll()); } catch (SQLException ignored) {}
             req.getRequestDispatcher("/WEB-INF/views/ca-form.jsp").forward(req, resp);
         }
+    }
+
+    private void handleStatusChange(HttpServletRequest req, HttpServletResponse resp, long id, String action)
+            throws ServletException, IOException {
+        try {
+            if ("disable".equals(action)) caService.disable(id); else caService.enable(id);
+            resp.sendRedirect(req.getContextPath() + "/ca/" + id);
+        } catch (SQLException | IllegalArgumentException e) {
+            forwardToDetailWithError(req, resp, id, e);
+        }
+    }
+
+    private void handleRevoke(HttpServletRequest req, HttpServletResponse resp, long id)
+            throws ServletException, IOException {
+        try {
+            requireAdmin(req);
+            String reason  = req.getParameter("reason");
+            String comment = req.getParameter("comment");
+            caService.revoke(id, reason, currentUsername(req), comment);
+            resp.sendRedirect(req.getContextPath() + "/ca/" + id);
+        } catch (SQLException | IllegalArgumentException | SecurityException e) {
+            forwardToDetailWithError(req, resp, id, e);
+        }
+    }
+
+    private void handleDelete(HttpServletRequest req, HttpServletResponse resp, long id)
+            throws ServletException, IOException {
+        try {
+            requireAdmin(req);
+            caService.delete(id);
+            resp.sendRedirect(req.getContextPath() + "/ca/");
+        } catch (SQLException | IllegalArgumentException | SecurityException e) {
+            forwardToDetailWithError(req, resp, id, e);
+        }
+    }
+
+    private void forwardToDetailWithError(HttpServletRequest req, HttpServletResponse resp, long id, Exception e)
+            throws ServletException, IOException {
+        log.error("CA operation failed for id={}", id, e);
+        req.setAttribute("error", e.getMessage());
+        try {
+            caService.findById(id).ifPresent(ca -> req.setAttribute("ca", ca));
+            req.setAttribute("children",     caService.findChildren(id));
+            req.setAttribute("certificates", certService.findByCa(id));
+            req.setAttribute("certCount",    certService.countTotal());
+            req.setAttribute("issuedCount",  caService.countIssuedCerts(id));
+            req.setAttribute("revocationReasons", RevokedCertificate.RevocationReason.values());
+        } catch (SQLException ignored) {}
+        if (req.getAttribute("ca") == null) { resp.sendError(404); return; }
+        req.getRequestDispatcher("/WEB-INF/views/ca-detail.jsp").forward(req, resp);
+    }
+
+    private void requireAdmin(HttpServletRequest req) {
+        PkiUser user = (PkiUser) req.getSession().getAttribute("currentUser");
+        if (user == null || !user.isAdmin())
+            throw new SecurityException("Administrator privileges are required for this action");
+    }
+
+    private String currentUsername(HttpServletRequest req) {
+        PkiUser user = (PkiUser) req.getSession().getAttribute("currentUser");
+        return user != null ? user.getUsername() : "unknown";
     }
 
     private CaConfig buildFromRequest(HttpServletRequest req) {
@@ -108,6 +187,7 @@ public class CaServlet extends HttpServlet {
         ca.setEmailAddress(nn(req.getParameter("emailAddress")));
         ca.setCrlUrl(nn(req.getParameter("crlUrl")));
         ca.setOcspUrl(nn(req.getParameter("ocspUrl")));
+        ca.setPermittedDomains(nn(req.getParameter("permittedDomains")));
         String md = req.getParameter("defaultMd"); ca.setDefaultMd(md != null ? md : "sha256");
         String days = req.getParameter("defaultDays"); if (days != null && !days.isBlank()) ca.setDefaultDays(Integer.parseInt(days));
         String ks = req.getParameter("keySize"); if (ks != null && !ks.isBlank()) ca.setKeySize(Integer.parseInt(ks));

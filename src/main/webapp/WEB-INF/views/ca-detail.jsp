@@ -1,5 +1,5 @@
 <%@ page contentType="text/html;charset=UTF-8" %>
-<%@ page import="java.util.List, com.macmario.services.pki.entity.CaConfig, com.macmario.services.pki.entity.CertificateRecord, com.macmario.services.pki.entity.PkiUser" %>
+<%@ page import="java.util.List, com.macmario.services.pki.entity.CaConfig, com.macmario.services.pki.entity.CertificateRecord, com.macmario.services.pki.entity.PkiUser, com.macmario.services.pki.entity.RevokedCertificate" %>
 <%! private String e(String s){if(s==null)return "";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");} %>
 <%
 CaConfig ca=(CaConfig)request.getAttribute("ca");
@@ -12,9 +12,14 @@ String ctx=request.getContextPath();
 String error=(String)request.getAttribute("error");
 PkiUser me=(PkiUser)session.getAttribute("currentUser");
 if(ca==null){response.sendError(404);return;}
+RevokedCertificate.RevocationReason[] reasons=(RevokedCertificate.RevocationReason[])request.getAttribute("revocationReasons");
+long issuedCount=request.getAttribute("issuedCount")!=null?(long)request.getAttribute("issuedCount"):0;
+int childCount=children.size();
+boolean isAdmin=me!=null&&me.isAdmin();
+boolean revoked=ca.getStatus()==CaConfig.CaStatus.REVOKED;
 String typeBadge=ca.getCaType()==CaConfig.CaType.ROOT?"badge-root":ca.getCaType()==CaConfig.CaType.INTERMEDIATE?"badge-inter":"badge-issuing";
-String statusBadge=ca.getStatus()==CaConfig.CaStatus.DISABLED?"bg-secondary":ca.isExpired()?"bg-danger":"bg-success";
-String statusLabel=ca.getStatus()==CaConfig.CaStatus.DISABLED?"Disabled":ca.isExpired()?"Expired":"Active";
+String statusBadge=revoked?"bg-dark":ca.getStatus()==CaConfig.CaStatus.DISABLED?"bg-secondary":ca.isExpired()?"bg-danger":"bg-success";
+String statusLabel=revoked?"Revoked":ca.getStatus()==CaConfig.CaStatus.DISABLED?"Disabled":ca.isExpired()?"Expired":"Active";
 %>
 <!DOCTYPE html><html lang="de">
 <head><meta charset="UTF-8"/><title>PKI Manager – <%=e(ca.getDisplayName())%></title>
@@ -78,20 +83,33 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <span style="font-weight:600;color:#0d1b2a;"><i class="bi bi-shield-lock me-2"></i><%=e(ca.getDisplayName())%></span>
     <div class="d-flex gap-2">
       <a href="<%=ctx%>/ca/<%=ca.getId()%>/cert.pem" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Download PEM</a>
+      <% if(!revoked){ %>
       <a href="<%=ctx%>/cert/issue?caId=<%=ca.getId()%>" class="btn btn-success btn-sm"><i class="bi bi-plus me-1"></i>Issue Certificate</a>
-      <% if(ca.getStatus()==CaConfig.CaStatus.ACTIVE){ %>
+      <% } %>
+      <% if(!revoked && ca.getStatus()==CaConfig.CaStatus.ACTIVE){ %>
       <form method="post" action="<%=ctx%>/ca/<%=ca.getId()%>/disable" style="display:inline;" onsubmit="return confirm('Disable this CA?')">
         <button class="btn btn-warning btn-sm"><i class="bi bi-pause-circle me-1"></i>Disable</button>
       </form>
-      <% } else { %>
+      <% } else if(!revoked){ %>
       <form method="post" action="<%=ctx%>/ca/<%=ca.getId()%>/enable" style="display:inline;">
         <button class="btn btn-primary btn-sm"><i class="bi bi-play-circle me-1"></i>Enable</button>
       </form>
+      <% } %>
+      <% if(isAdmin && !revoked){ %>
+      <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#revokeCaModal"><i class="bi bi-x-octagon me-1"></i>Revoke</button>
+      <% } %>
+      <% if(isAdmin){ %>
+      <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteCaModal"><i class="bi bi-trash me-1"></i>Delete</button>
       <% } %>
     </div>
   </div>
   <div class="content-area">
     <% if(error!=null){ %><div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i><%=e(error)%></div><% } %>
+    <% if(revoked){ %>
+    <div class="alert alert-dark d-flex align-items-center"><i class="bi bi-x-octagon-fill me-2"></i>
+      <div><strong>This CA has been revoked.</strong> It can no longer issue certificates and all certificates it issued have been revoked. Revocation is permanent.</div>
+    </div>
+    <% } %>
     <div class="row g-4 mb-4">
       <div class="col-lg-7">
         <div class="info-card h-100">
@@ -121,10 +139,20 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
           <% if(ca.getOcspUrl()!=null&&!ca.getOcspUrl().isEmpty()){ %>
           <div class="dr"><span class="dl">OCSP URL:</span><a href="<%=e(ca.getOcspUrl())%>" target="_blank" style="font-size:.8rem;"><%=e(ca.getOcspUrl())%></a></div>
           <% } %>
+          <% if(ca.getPermittedDomains()!=null&&!ca.getPermittedDomains().isEmpty()){ %>
+          <div class="dr"><span class="dl">Name Constraints:</span>
+            <span><i class="bi bi-shield-check me-1 text-success"></i>Permitted: <code style="font-size:.78rem;"><%=e(ca.getPermittedDomains())%></code></span>
+          </div>
+          <% } %>
           <% if(ca.getParentCaId()!=null){ %>
           <div class="dr"><span class="dl">Parent CA:</span>
             <a href="<%=ctx%>/ca/<%=ca.getParentCaId()%>"><%=e(ca.getParentCaDisplayName())%></a>
           </div>
+          <% } %>
+          <% if(revoked){ %>
+          <div class="dr"><span class="dl">Revoked At:</span><%=ca.getRevokedAt()!=null?ca.getRevokedAt().toString().replace('T',' ').substring(0,19):""%></div>
+          <div class="dr"><span class="dl">Revocation Reason:</span><code style="font-size:.78rem;"><%=e(ca.getRevocationReason())%></code></div>
+          <div class="dr"><span class="dl">Revoked By:</span><%=e(ca.getRevokedBy())%></div>
           <% } %>
         </div>
       </div>
@@ -199,5 +227,74 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     </div>
   </div>
 </div>
+<% if(isAdmin && !revoked){ %>
+<!-- Revoke CA Modal -->
+<div class="modal fade" id="revokeCaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-x-octagon me-2 text-danger"></i>Revoke <%=ca.getCaType()%> CA</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="<%=ctx%>/ca/<%=ca.getId()%>/revoke">
+        <div class="modal-body">
+          <p class="mb-2">Revoke <strong><%=e(ca.getDisplayName())%></strong>? This is <strong>permanent</strong>.</p>
+          <div class="alert alert-warning py-2" style="font-size:.85rem;">
+            This also revokes <strong>every sub CA in the subtree beneath it</strong>
+            (<%=childCount%> direct child CA(s)) and <strong>every still-valid certificate</strong>
+            issued anywhere in that subtree (<%=issuedCount%> issued directly by this CA).
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Revocation Reason</label>
+            <select name="reason" class="form-select">
+              <% if(reasons!=null){for(RevokedCertificate.RevocationReason r:reasons){ %>
+              <option value="<%=r.name()%>" <%=r==RevokedCertificate.RevocationReason.CESSATION_OF_OPERATION?"selected":""%>><%=r.name()%></option>
+              <% }} %>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Comment (optional)</label>
+            <textarea name="comment" rows="3" class="form-control" placeholder="Reason for revocation…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger"><i class="bi bi-x-octagon me-1"></i>Revoke CA</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<% } %>
+<% if(isAdmin){ %>
+<!-- Delete CA Modal -->
+<div class="modal fade" id="deleteCaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-trash me-2 text-danger"></i>Delete <%=ca.getCaType()%> CA</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="<%=ctx%>/ca/<%=ca.getId()%>/delete" onsubmit="return document.getElementById('delConfirm').value==='DELETE';">
+        <div class="modal-body">
+          <div class="alert alert-danger py-2" style="font-size:.85rem;">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            This <strong>permanently deletes</strong> <strong><%=e(ca.getDisplayName())%></strong>,
+            <strong>every sub CA in the subtree beneath it</strong> (<%=childCount%> direct),
+            and <strong>every certificate</strong> issued anywhere in that subtree
+            (<%=issuedCount%> issued directly by this CA). This cannot be undone.
+          </div>
+          <label class="form-label fw-semibold">Type <code>DELETE</code> to confirm</label>
+          <input type="text" id="delConfirm" class="form-control" autocomplete="off" placeholder="DELETE"/>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Delete Permanently</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<% } %>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body></html>

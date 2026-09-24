@@ -239,6 +239,15 @@ public class EntityManagerProvider {
             catch (Exception ignored) {}
             try { st.execute("ALTER TABLE CSR_REQUEST ADD COLUMN IF NOT EXISTS api_client_id BIGINT"); }
             catch (Exception ignored) {}
+            // CA revocation audit + Name Constraints support
+            try { st.execute("ALTER TABLE CA_CONFIG ADD COLUMN IF NOT EXISTS permitted_domains CLOB"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE CA_CONFIG ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE CA_CONFIG ADD COLUMN IF NOT EXISTS revocation_reason VARCHAR(50)"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE CA_CONFIG ADD COLUMN IF NOT EXISTS revoked_by VARCHAR(200)"); }
+            catch (Exception ignored) {}
 
             log.info("Database schema ready.");
         }

@@ -78,8 +78,8 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
         <tbody>
 <% for (CaConfig ca : caList) {
    String typeBadge = ca.getCaType()==CaConfig.CaType.ROOT?"badge-root":ca.getCaType()==CaConfig.CaType.INTERMEDIATE?"badge-inter":"badge-issuing";
-   String statusBadge = ca.getStatus()==CaConfig.CaStatus.DISABLED?"bg-secondary":ca.isExpired()?"bg-danger":ca.isExpiringSoon()?"bg-warning text-dark":"bg-success";
-   String statusLabel = ca.getStatus()==CaConfig.CaStatus.DISABLED?"Disabled":ca.isExpired()?"Expired":ca.isExpiringSoon()?"Expiring Soon":"Active";
+   String statusBadge = ca.isRevoked()?"bg-dark":ca.getStatus()==CaConfig.CaStatus.DISABLED?"bg-secondary":ca.isExpired()?"bg-danger":ca.isExpiringSoon()?"bg-warning text-dark":"bg-success";
+   String statusLabel = ca.isRevoked()?"Revoked":ca.getStatus()==CaConfig.CaStatus.DISABLED?"Disabled":ca.isExpired()?"Expired":ca.isExpiringSoon()?"Expiring Soon":"Active";
 %>
           <tr>
             <td><code style="font-size:.8rem;"><%=esc(ca.getRoleName())%></code></td>

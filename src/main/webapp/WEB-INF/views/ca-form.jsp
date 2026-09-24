@@ -92,10 +92,11 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
             <label class="form-label fw-semibold">Parent Certificate Authority</label>
             <select name="parentCaId" class="form-select">
               <option value="">— Select Parent CA —</option>
-<% for(CaConfig pca : allCas){ %>
+<% for(CaConfig pca : allCas){ if(pca.getStatus()!=CaConfig.CaStatus.ACTIVE || pca.isExpired()) continue; %>
               <option value="<%=pca.getId()%>"><%=e(pca.getDisplayName())%> (<%=pca.getCaType()%>)</option>
 <% } %>
             </select>
+            <div class="form-text conf-hint">Only active, non-expired CAs can sign a new sub CA.</div>
           </div>
         </div>
 
@@ -138,6 +139,20 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
             <div class="form-text conf-hint">ocspUrl =</div></div>
         </div>
 
+        <div id="nameConstraintsRow" style="display:none;" class="mb-4">
+          <div class="fsect">Name Constraints <span class="conf-hint ms-2">X.509 permittedSubtrees</span></div>
+          <div class="row g-3">
+            <div class="col-md-12"><label class="form-label fw-semibold">Permitted Domains</label>
+              <input type="text" name="permittedDomains" class="form-control" placeholder="int, example.local"/>
+              <div class="form-text conf-hint">
+                Comma- or space-separated. When set, this internal CA is cryptographically restricted
+                (critical Name Constraints extension) to issuing certificates for hosts and e-mail
+                addresses under these domains only — e.g. <code>int</code> permits <code>host.int</code>.
+                Leave empty for no restriction. Only applies to Intermediate / Issuing CAs.
+              </div></div>
+          </div>
+        </div>
+
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-primary"><i class="bi bi-shield-plus me-1"></i>Generate &amp; Save CA</button>
           <a href="<%=ctx%>/ca" class="btn btn-outline-secondary">Cancel</a>
@@ -154,8 +169,9 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function updateParentRow(){
-  document.getElementById('parentCaRow').style.display=
-    document.getElementById('caTypeSelect').value==='ROOT'?'none':'block';
+  var isSub=document.getElementById('caTypeSelect').value!=='ROOT';
+  document.getElementById('parentCaRow').style.display=isSub?'block':'none';
+  document.getElementById('nameConstraintsRow').style.display=isSub?'block':'none';
 }
 document.getElementById('caTypeSelect').addEventListener('change', updateParentRow);
 updateParentRow();

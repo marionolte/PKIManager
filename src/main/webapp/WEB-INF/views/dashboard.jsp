@@ -166,9 +166,11 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
                         ca.getCaType() == CaConfig.CaType.INTERMEDIATE ? "ca-tree-inter" : "ca-tree-issuing";
      String typeBadge = ca.getCaType() == CaConfig.CaType.ROOT ? "badge-root" :
                         ca.getCaType() == CaConfig.CaType.INTERMEDIATE ? "badge-inter" : "badge-issuing";
-     String statusBadge = ca.getStatus() == CaConfig.CaStatus.DISABLED ? "bg-secondary" :
+     String statusBadge = ca.isRevoked() ? "bg-dark" :
+                          ca.getStatus() == CaConfig.CaStatus.DISABLED ? "bg-secondary" :
                           ca.isExpired() ? "bg-danger" : "bg-success";
-     String statusLabel = ca.getStatus() == CaConfig.CaStatus.DISABLED ? "Disabled" :
+     String statusLabel = ca.isRevoked() ? "Revoked" :
+                          ca.getStatus() == CaConfig.CaStatus.DISABLED ? "Disabled" :
                           ca.isExpired() ? "Expired" : "Active";
 %>
           <div class="ca-tree-item <%=typeClass%>">

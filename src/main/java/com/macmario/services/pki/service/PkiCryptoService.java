@@ -129,6 +129,9 @@ public class PkiCryptoService {
         builder.addExtension(Extension.subjectKeyIdentifier, false,
                 createSubjectKeyId(keyPair.getPublic()));
 
+        // X.509 Name Constraints: cryptographically restrict what this internal CA may issue for.
+        addNameConstraints(builder, ca.getPermittedDomains());
+
         X509Certificate cert = new JcaX509CertificateConverter()
                 .setProvider("BC").getCertificate(builder.build(signer));
 
@@ -138,6 +141,35 @@ public class PkiCryptoService {
         ca.setValidFrom(now);
         ca.setValidUntil(expiry);
         log.info("Sub CA generated, serial={}", ca.getSerialNumber());
+    }
+
+    /**
+     * Add an X.509 Name Constraints extension (permittedSubtrees) for the given
+     * comma/space/newline-separated domains. For each domain a dNSName and an
+     * rfc822Name subtree is permitted, so e.g. "int" restricts the CA to hosts
+     * and e-mail addresses under the .int domain. No-op when {@code permitted}
+     * is null/blank.
+     */
+    private void addNameConstraints(X509v3CertificateBuilder builder, String permitted) throws IOException {
+        if (permitted == null || permitted.isBlank()) return;
+        List<GeneralSubtree> subtrees = new ArrayList<>();
+        for (String raw : permitted.split("[,\\s]+")) {
+            String domain = raw.trim();
+            if (domain.isEmpty()) continue;
+            // RFC 5280 §4.2.1.10: a dNSName constraint matches by right-anchored label
+            // suffix and takes NO leading dot ("int" permits host.int). An rfc822Name
+            // constraint that should match a whole mail domain DOES take a leading dot
+            // (".int" permits any mailbox in the .int domain).
+            String dns = domain.startsWith(".") ? domain.substring(1) : domain;
+            if (dns.isEmpty()) continue;
+            String email = "." + dns;
+            subtrees.add(new GeneralSubtree(new GeneralName(GeneralName.dNSName, dns)));
+            subtrees.add(new GeneralSubtree(new GeneralName(GeneralName.rfc822Name, email)));
+        }
+        if (subtrees.isEmpty()) return;
+        NameConstraints nc = new NameConstraints(subtrees.toArray(new GeneralSubtree[0]), null);
+        builder.addExtension(Extension.nameConstraints, true, nc);
+        log.info("Applied Name Constraints permittedSubtrees: {}", permitted);
     }
 
     // ──────────────────────────────────────────
