@@ -14,8 +14,28 @@ Create and manage a multi-tier CA hierarchy:
 - **Issuing CA** — signs end-entity certificates
 
 Each CA stores its RSA key pair and PEM certificate in the database.
-CAs can be enabled or disabled; disabled CAs cannot issue new certificates.
 The CA certificate is downloadable as a PEM file for distribution.
+
+**CA lifecycle (Root and Sub CAs alike):**
+- **Enable / disable** — a disabled CA cannot issue new certificates.
+- **Revoke** *(admin)* — permanently marks the CA `REVOKED`, **cascades to every descendant CA**,
+  and revokes all still-valid certificates in the subtree (written to `REVOKED_CERTIFICATE`).
+  A revoked CA can never be re-enabled.
+- **Delete** *(admin)* — permanently removes the CA, all descendant CAs, every certificate they
+  issued (plus revocation records), and detaches CSR / API-client references — all in one transaction.
+  Irreversible.
+
+Only **ACTIVE, non-expired** CAs may issue certificates; this is enforced server-side on every
+issuance path (web UI, API, and CSR job signing).
+
+> **Note:** the application does not generate CRLs, so CA revocation is a database-level trust
+> marker. A revoked Root in particular must be removed from client trust stores manually.
+
+**Name Constraints (internal CAs):** when creating an Intermediate or Issuing CA you can specify
+one or more **permitted domains** (e.g. `int`). PKI Manager then embeds a critical X.509
+`NameConstraints` extension (`permittedSubtrees`) so the CA is cryptographically restricted to
+issuing certificates for hosts and e-mail addresses under those domains only —
+`int` permits `host.int` (DNS) and mailboxes in the `.int` domain. Root CAs ignore this field.
 
 ### Certificate Issuance
 Issue end-entity certificates in two ways:
@@ -284,6 +304,8 @@ On first startup PKI Manager creates a default administrator account:
 | `GET /pki-manager/ca/{id}/cert.pem` | Download CA certificate as PEM |
 | `POST /pki-manager/ca/{id}/enable` | Re-enable CA |
 | `POST /pki-manager/ca/{id}/disable` | Disable CA |
+| `POST /pki-manager/ca/{id}/revoke` | Revoke CA + descendants + issued certs (admin) |
+| `POST /pki-manager/ca/{id}/delete` | Permanently delete CA + subtree, cascade (admin) |
 
 ### Certificates
 | URL | Description |
@@ -353,9 +375,9 @@ src/main/java/com/macmario/services/pki/
 │   ├── ApiClient.java
 │   └── PkiUser.java
 ├── service/
-│   ├── CaService.java            CA CRUD + status management
-│   ├── CertificateService.java   Issue, revoke, query certificates
-│   ├── PkiCryptoService.java     Bouncy Castle: key gen, CA init, CSR signing
+│   ├── CaService.java            CA CRUD, status, cascade revoke/delete
+│   ├── CertificateService.java   Issue, revoke, query certificates (issuance guarded to ACTIVE CAs)
+│   ├── PkiCryptoService.java     Bouncy Castle: key gen, CA init, Name Constraints, CSR signing
 │   ├── CsrRequestService.java    CSR submission queue
 │   ├── UserService.java          PBKDF2 auth, user CRUD
 │   ├── ApiClientService.java     API client CRUD + key generation/rotation
@@ -400,7 +422,7 @@ Schema is created automatically via `EntityManagerProvider.createSchema()`.
 
 | Table | Contents |
 |---|---|
-| `CA_CONFIG` | CA records: type, subject DN, PEM cert + private key, validity |
+| `CA_CONFIG` | CA records: type, status, subject DN, PEM cert + private key, validity, `permitted_domains` (Name Constraints), revocation audit (`revoked_at`, `revocation_reason`, `revoked_by`) |
 | `CERTIFICATE_RECORD` | Issued certificates: status, type, subject DN, SANs, PEM cert + optional private key, download token, `api_client_id` |
 | `REVOKED_CERTIFICATE` | Revocation audit trail: reason, timestamp, operator |
 | `PKI_CONFIGURATION` | Key-value runtime settings (`crl.validity.days`, `cert.expiry.warn.days`, etc.) |

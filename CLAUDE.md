@@ -42,7 +42,7 @@ All servlet routes use `@WebServlet` annotations (no web.xml mappings):
 | Servlet | URL pattern | Key routes |
 |---|---|---|
 | `DashboardServlet` | `/dashboard`, `/` | GET: stats + expiring certs |
-| `CaServlet` | `/ca/*` | GET `/ca/`, `/ca/create`, `/ca/{id}`, `/ca/{id}/cert.pem`; POST `/ca/create`, `/ca/{id}/enable`, `/ca/{id}/disable` |
+| `CaServlet` | `/ca/*` | GET `/ca/`, `/ca/create`, `/ca/{id}`, `/ca/{id}/cert.pem`; POST `/ca/create`, `/ca/{id}/enable`, `/ca/{id}/disable`, `/ca/{id}/revoke` (admin), `/ca/{id}/delete` (admin, cascade) |
 | `CertificateServlet` | `/cert/*` | GET `/cert/`, `/cert/issue`, `/cert/{id}`, `/cert/{id}/download.pem`; POST `/cert/issue`, `/cert/{id}/revoke` |
 
 ## Database
@@ -65,6 +65,9 @@ All crypto goes through **`PkiCryptoService`** using **Bouncy Castle 1.84** (`bc
 - External PKCS#10 CSR signing (`signCsr`) or generate-and-sign in one call (`generateAndSign`)
 - Certificate types: `SERVER`, `CLIENT`, `CODE_SIGNING`, `EMAIL`, `CA` — each maps to distinct key usage bits
 - Extensions: SAN (DNS + IP), CRL DP, OCSP URL
+- **Name Constraints**: Intermediate/Issuing CAs can carry a critical `permittedSubtrees` extension (`CaConfig.permittedDomains`, e.g. `int`) restricting which DNS/e-mail domains they may issue for. Root CAs ignore it.
+
+**CA lifecycle:** CAs can be disabled/enabled, **revoked**, or **deleted** (both admin-only). Revocation (`CaService.revoke`) is permanent, cascades to all descendant CAs, and revokes every VALID cert in the subtree via `REVOKED_CERTIFICATE`. Deletion (`CaService.delete`) permanently removes the CA, all descendant CAs, their issued certs + revocation rows, and detaches CSR/API-client references — all in one transaction. Only ACTIVE, non-expired CAs may issue certs (enforced server-side in `CertificateService`).
 
 Private keys are stored unencrypted in PEM format in H2. There is no authentication layer — access control must be added at the Tomcat realm or reverse proxy level.
 

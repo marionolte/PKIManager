@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 /** Plain Java object representing a Certificate Authority row. */
 public class CaConfig {
     public enum CaType   { ROOT, INTERMEDIATE, ISSUING }
-    public enum CaStatus { ACTIVE, DISABLED, EXPIRED }
+    public enum CaStatus { ACTIVE, DISABLED, EXPIRED, REVOKED }
 
     private Long id;
     private String roleName;
@@ -26,6 +26,10 @@ public class CaConfig {
     private int keySize = 4096;
     private String crlUrl;
     private String ocspUrl;
+    private String permittedDomains; // comma-separated DNS subtrees for X.509 Name Constraints (sub/issuing CAs)
+    private LocalDateTime revokedAt;
+    private String revocationReason;
+    private String revokedBy;
     private String certificatePem;
     private String privateKeyPem;
     private String serialNumber;
@@ -73,6 +77,14 @@ public class CaConfig {
     public void setCrlUrl(String v) { this.crlUrl = v; }
     public String getOcspUrl() { return ocspUrl; }
     public void setOcspUrl(String v) { this.ocspUrl = v; }
+    public String getPermittedDomains() { return permittedDomains; }
+    public void setPermittedDomains(String v) { this.permittedDomains = v; }
+    public LocalDateTime getRevokedAt() { return revokedAt; }
+    public void setRevokedAt(LocalDateTime v) { this.revokedAt = v; }
+    public String getRevocationReason() { return revocationReason; }
+    public void setRevocationReason(String v) { this.revocationReason = v; }
+    public String getRevokedBy() { return revokedBy; }
+    public void setRevokedBy(String v) { this.revokedBy = v; }
     public String getCertificatePem() { return certificatePem; }
     public void setCertificatePem(String v) { this.certificatePem = v; }
     public String getPrivateKeyPem() { return privateKeyPem; }
@@ -88,6 +100,9 @@ public class CaConfig {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
 
+    public boolean isRevoked() {
+        return status == CaStatus.REVOKED;
+    }
     public boolean isExpired() {
         return validUntil != null && LocalDateTime.now().isAfter(validUntil);
     }

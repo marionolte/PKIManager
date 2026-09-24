@@ -101,6 +101,7 @@ public class CertificateService {
     }
 
     public CertificateRecord generateAndIssue(CaConfig ca, CertificateRecord template) throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
+        requireIssuable(ca);
         crypto.generateAndSign(ca, template);
         template.setIssuingCaId(ca.getId());
         template.setIssuingCaDisplayName(ca.getDisplayName());
@@ -108,10 +109,20 @@ public class CertificateService {
     }
 
     public CertificateRecord signExternalCsr(String csrPem, CaConfig ca, CertificateRecord template) throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
+        requireIssuable(ca);
         crypto.signCsr(csrPem, ca, template);
         template.setIssuingCaId(ca.getId());
         template.setIssuingCaDisplayName(ca.getDisplayName());
         return persist(template);
+    }
+
+    /** A CA must be ACTIVE (not disabled, expired or revoked) to issue certificates. */
+    private void requireIssuable(CaConfig ca) {
+        if (ca.getStatus() != CaConfig.CaStatus.ACTIVE)
+            throw new IllegalArgumentException(
+                "CA '" + ca.getDisplayName() + "' is " + ca.getStatus() + " and cannot issue certificates");
+        if (ca.isExpired())
+            throw new IllegalArgumentException("CA '" + ca.getDisplayName() + "' has expired and cannot issue certificates");
     }
 
     public void revoke(Long certId, String reason, String revokedBy, String comment) throws SQLException {
