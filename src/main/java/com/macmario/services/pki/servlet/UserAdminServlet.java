@@ -1,6 +1,8 @@
 package com.macmario.services.pki.servlet;
 
 import com.macmario.services.pki.entity.PkiUser;
+import com.macmario.services.pki.service.ConfigService;
+import com.macmario.services.pki.service.ScimService;
 import com.macmario.services.pki.service.UserService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -9,7 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.security.SecureRandom;
 import java.sql.SQLException;
+import java.util.Base64;
 
 /**
  * Admin user management.
@@ -25,14 +29,32 @@ import java.sql.SQLException;
 public class UserAdminServlet extends HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(UserAdminServlet.class);
     private final UserService userService = new UserService();
+    private final ConfigService configService = new ConfigService();
+
+    /** User management is ADMIN-only; VIEWERs (and unauthenticated requests) get 403. */
+    private boolean requireAdmin(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        PkiUser me = (PkiUser) req.getSession().getAttribute("currentUser");
+        if (me == null || !me.isAdmin()) {
+            resp.sendError(403, "Forbidden");
+            return false;
+        }
+        return true;
+    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
+        if (!requireAdmin(req, resp)) return;
         String path = req.getPathInfo();
         if (path == null || path.equals("/") || path.isEmpty()) {
             try { req.setAttribute("users", userService.findAll()); }
             catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
+            req.setAttribute("scimConfigured", !configService.get("scim.token.sha256", "").isBlank());
+            HttpSession session = req.getSession(false);
+            if (session != null && session.getAttribute("newScimToken") != null) {
+                req.setAttribute("newScimToken", session.getAttribute("newScimToken"));
+                session.removeAttribute("newScimToken");
+            }
             req.getRequestDispatcher("/WEB-INF/views/user-list.jsp").forward(req, resp);
         } else if (path.equals("/new")) {
             req.getRequestDispatcher("/WEB-INF/views/user-form.jsp").forward(req, resp);
@@ -52,6 +74,7 @@ public class UserAdminServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
+        if (!requireAdmin(req, resp)) return;
         String path = req.getPathInfo();
         if (path == null) path = "/";
         try {
@@ -65,6 +88,14 @@ public class UserAdminServlet extends HttpServlet {
                     req.getParameter("email"),
                     role
                 );
+                resp.sendRedirect(req.getContextPath() + "/admin/users/");
+            } else if (path.equals("/scim-token")) {
+                ApiClientAdminServlet.requireSameOrigin(req);
+                byte[] b = new byte[32];
+                new SecureRandom().nextBytes(b);
+                String token = "scim_" + Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+                configService.set("scim.token.sha256", ScimService.sha256Hex(token));
+                req.getSession().setAttribute("newScimToken", token);
                 resp.sendRedirect(req.getContextPath() + "/admin/users/");
             } else if (path.matches("/\\d+")) {
                 Long id = Long.parseLong(path.substring(1));
@@ -89,7 +120,7 @@ public class UserAdminServlet extends HttpServlet {
                 userService.changePassword(id, pw);
                 resp.sendRedirect(req.getContextPath() + "/admin/users/");
             } else { resp.sendError(404); }
-        } catch (SQLException | IllegalArgumentException | IllegalStateException e) {
+        } catch (SQLException | IllegalArgumentException | IllegalStateException | SecurityException e) {
             log.error("User operation failed", e);
             req.setAttribute("error", e.getMessage());
             try { req.setAttribute("users", userService.findAll()); } catch (SQLException ignored) {}

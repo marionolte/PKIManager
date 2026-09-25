@@ -6,6 +6,11 @@
     String error = (String) request.getAttribute("error");
     PkiUser me   = (PkiUser) session.getAttribute("currentUser");
     if (users == null) users = java.util.Collections.emptyList();
+    boolean scimConfigured = Boolean.TRUE.equals(request.getAttribute("scimConfigured"));
+    String newScimToken = (String) request.getAttribute("newScimToken");
+    String scimBase = request.getScheme()+"://"+request.getServerName()
+        + (((request.getScheme().equals("http")&&request.getServerPort()==80)||(request.getScheme().equals("https")&&request.getServerPort()==443))?"":(":"+request.getServerPort()))
+        + ctx + "/scim/v2";
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -57,8 +62,14 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">Administration</div>
     <a href="<%=ctx%>/admin/users/" class="nav-link active"><i class="bi bi-people"></i>Users</a>
     <a href="<%=ctx%>/admin/acme" class="nav-link"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
-    <a href="<%=ctx%>/admin/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
-  </nav>
+    <a href="<%=ctx%>/api-clients/" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/admin/backup/" class="nav-link"><i class="bi bi-hdd-stack"></i>Backup &amp; Restore</a>
+      <div class="nav-sect mt-2"><i class="bi bi-book me-1"></i>Documentation</div>
+    <a href="<%=ctx%>/docs/certificates" class="nav-link"><i class="bi bi-file-earmark-text"></i>Certificates</a>
+    <a href="<%=ctx%>/docs/scim" class="nav-link"><i class="bi bi-people"></i>SCIM</a>
+    <a href="<%=ctx%>/docs/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/docs/acme" class="nav-link"><i class="bi bi-lock"></i>ACME</a>
+</nav>
   <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
     <i class="bi bi-person-circle me-1"></i><%=me != null ? me.getDisplayName() : ""%>
     <form method="post" action="<%=ctx%>/logout" class="d-inline ms-2">
@@ -76,6 +87,31 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 <% if (error != null) { %>
     <div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i><%=error%></div>
 <% } %>
+<% if (newScimToken != null) { %>
+    <div class="alert alert-success alert-dismissible">
+      <i class="bi bi-check-circle me-2"></i><strong>SCIM bearer token</strong> — copy it now, it is shown only once:
+      <div class="d-flex align-items-center gap-2 mt-2">
+        <span id="scimTok" style="font-family:monospace;font-size:.75rem;background:#f1f5f9;border:1px solid #dde4ee;border-radius:6px;padding:.35rem .6rem;word-break:break-all;" class="flex-grow-1"><%=esc(newScimToken)%></span>
+        <button class="btn btn-sm btn-outline-success" onclick="navigator.clipboard.writeText(document.getElementById('scimTok').textContent);this.textContent='Copied!'">Copy</button>
+      </div>
+    </div>
+<% } %>
+    <div class="card mb-3" style="border:none;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-arrow-repeat me-2 text-primary"></i>SCIM 2.0 Provisioning</h6>
+        <p style="font-size:.82rem;color:#555;margin-bottom:.5rem;">
+          Base URL: <code><%=esc(scimBase)%></code> — authenticate with <code>Authorization: Bearer &lt;token&gt;</code>.
+          Resources: <code>/Users</code>, <code>/Groups</code> (ADMIN/VIEWER), <code>/Certificates</code>, <code>/ApiClients</code>.
+        </p>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge <%=scimConfigured?"bg-success":"bg-secondary"%>"><%=scimConfigured?"Enabled":"Disabled (no token)"%></span>
+          <form method="post" action="<%=ctx%>/admin/users/scim-token" class="d-inline"
+                onsubmit="return confirm('<%=scimConfigured?"Rotate":"Generate"%> the SCIM token? Any existing token stops working.')">
+            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-key me-1"></i><%=scimConfigured?"Rotate token":"Generate token"%></button>
+          </form>
+        </div>
+      </div>
+    </div>
     <div class="table-card">
 <% if (users.isEmpty()) { %>
       <div class="text-center text-muted py-5">

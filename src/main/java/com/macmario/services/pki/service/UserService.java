@@ -141,6 +141,33 @@ public class UserService {
         }
     }
 
+    public void setRole(Long id, PkiUser.Role role) throws SQLException {
+        try (Connection c = EntityManagerProvider.getConnection();
+             PreparedStatement ps = c.prepareStatement("UPDATE PKI_USER SET role=? WHERE id=?")) {
+            ps.setString(1, role.name());
+            ps.setLong(2, id);
+            ps.executeUpdate();
+        }
+    }
+
+    public void setActive(Long id, boolean active) throws SQLException {
+        try (Connection c = EntityManagerProvider.getConnection();
+             PreparedStatement ps = c.prepareStatement("UPDATE PKI_USER SET active=? WHERE id=?")) {
+            ps.setBoolean(1, active);
+            ps.setLong(2, id);
+            ps.executeUpdate();
+        }
+    }
+
+    /** Number of users who are both ADMIN and active (used to prevent lockout). */
+    public long countActiveAdmins() throws SQLException {
+        try (Connection c = EntityManagerProvider.getConnection();
+             Statement st = c.createStatement();
+             ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM PKI_USER WHERE role='ADMIN' AND active=TRUE")) {
+            return rs.next() ? rs.getLong(1) : 0;
+        }
+    }
+
     public void changePassword(Long id, String newPassword) throws SQLException {
         String salt = generateSalt();
         String hash = hashPassword(newPassword, salt);

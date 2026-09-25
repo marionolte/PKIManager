@@ -18,7 +18,14 @@ public class EntityManagerProvider {
 
     private static final Logger log = LoggerFactory.getLogger(EntityManagerProvider.class);
     private static String DB_URL;
+    private static Path dataDir;
     private static boolean initialized = false;
+
+    /** The directory that holds the H2 database (and where backups are written). */
+    public static Path getDataDir() {
+        if (!initialized) init();
+        return dataDir;
+    }
 
     public static synchronized void init() {
         if (initialized) return;
@@ -27,7 +34,7 @@ public class EntityManagerProvider {
 
             // Resolve data directory: prefer ${catalina.base}, fall back to CWD
             String catBase = System.getProperty("catalina.base");
-            Path dataDir = catBase != null
+            dataDir = catBase != null
                     ? Paths.get(catBase, "pki-data")
                     : Paths.get(System.getProperty("user.dir"), "pki-data");
 
@@ -247,6 +254,22 @@ public class EntityManagerProvider {
             try { st.execute("ALTER TABLE CA_CONFIG ADD COLUMN IF NOT EXISTS revocation_reason VARCHAR(50)"); }
             catch (Exception ignored) {}
             try { st.execute("ALTER TABLE CA_CONFIG ADD COLUMN IF NOT EXISTS revoked_by VARCHAR(200)"); }
+            catch (Exception ignored) {}
+            // API client access tracking (last authenticated call)
+            try { st.execute("ALTER TABLE API_CLIENT ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE API_CLIENT ADD COLUMN IF NOT EXISTS last_ip VARCHAR(64)"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE API_CLIENT ADD COLUMN IF NOT EXISTS last_user_agent VARCHAR(512)"); }
+            catch (Exception ignored) {}
+            // API client ownership + approval workflow (existing rows default to APPROVED)
+            try { st.execute("ALTER TABLE API_CLIENT ADD COLUMN IF NOT EXISTS owner_user_id BIGINT"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE API_CLIENT ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'APPROVED'"); }
+            catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE API_CLIENT ADD COLUMN IF NOT EXISTS approved_by VARCHAR(200)"); }
+            catch (Exception ignored) {}
+            try { st.execute("UPDATE API_CLIENT SET approval_status='APPROVED' WHERE approval_status IS NULL"); }
             catch (Exception ignored) {}
 
             log.info("Database schema ready.");

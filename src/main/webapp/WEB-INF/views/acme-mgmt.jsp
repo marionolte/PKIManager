@@ -58,8 +58,14 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">Administration</div>
     <a href="<%=ctx%>/admin/users/" class="nav-link"><i class="bi bi-people"></i>Users</a>
     <a href="<%=ctx%>/admin/acme" class="nav-link active"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
-    <a href="<%=ctx%>/admin/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
-  </nav>
+    <a href="<%=ctx%>/api-clients/" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/admin/backup/" class="nav-link"><i class="bi bi-hdd-stack"></i>Backup &amp; Restore</a>
+      <div class="nav-sect mt-2"><i class="bi bi-book me-1"></i>Documentation</div>
+    <a href="<%=ctx%>/docs/certificates" class="nav-link"><i class="bi bi-file-earmark-text"></i>Certificates</a>
+    <a href="<%=ctx%>/docs/scim" class="nav-link"><i class="bi bi-people"></i>SCIM</a>
+    <a href="<%=ctx%>/docs/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/docs/acme" class="nav-link"><i class="bi bi-lock"></i>ACME</a>
+</nav>
   <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
     <i class="bi bi-person-circle me-1"></i><%=me != null ? me.getDisplayName() : ""%>
     <form method="post" action="<%=ctx%>/logout" class="d-inline ms-2">
