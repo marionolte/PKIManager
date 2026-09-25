@@ -29,12 +29,19 @@ public class ApiAuthFilter implements Filter {
             return;
         }
         try {
-            Optional<ApiClient> client = service.findByApiKey(apiKey);
-            if (client.isEmpty() || !client.get().isActive()) {
-                deny(response, 401, "Invalid or inactive API key");
+            Optional<ApiClient> client = service.authenticate(apiKey);
+            if (client.isEmpty()) {
+                deny(response, 401, "Invalid, inactive, or unapproved API key");
                 return;
             }
-            request.setAttribute("apiClient", client.get());
+            ApiClient authed = client.get();
+            request.setAttribute("apiClient", authed);
+            // Best-effort: record who called and from where. Never fail the request over this.
+            try {
+                service.recordAccess(authed.getId(), request.getRemoteAddr(), request.getHeader("User-Agent"));
+            } catch (SQLException e) {
+                log.warn("Could not record API client access for {}: {}", authed.getName(), e.getMessage());
+            }
             chain.doFilter(req, res);
         } catch (SQLException e) {
             log.error("API auth DB error", e);

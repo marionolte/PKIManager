@@ -39,6 +39,10 @@ public class CaServlet extends HttpServlet {
             try { req.setAttribute("allCas", caService.findAll()); }
             catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
             req.getRequestDispatcher("/WEB-INF/views/ca-form.jsp").forward(req, resp);
+        } else if (path.equals("/import")) {
+            try { req.setAttribute("allCas", caService.findAll()); }
+            catch (SQLException e) { req.setAttribute("error", e.getMessage()); }
+            req.getRequestDispatcher("/WEB-INF/views/ca-import.jsp").forward(req, resp);
         } else if (path.matches("/\\d+")) {
             try {
                 Long id = Long.parseLong(path.substring(1));
@@ -75,6 +79,8 @@ public class CaServlet extends HttpServlet {
 
         if (path.equals("/create")) {
             handleCreate(req, resp);
+        } else if (path.equals("/import")) {
+            handleImport(req, resp);
         } else if (path.matches("/\\d+/disable")) {
             handleStatusChange(req, resp, idFrom(path, "/disable"), "disable");
         } else if (path.matches("/\\d+/enable")) {
@@ -110,6 +116,33 @@ public class CaServlet extends HttpServlet {
             req.setAttribute("error", e.getMessage());
             try { req.setAttribute("allCas", caService.findAll()); } catch (SQLException ignored) {}
             req.getRequestDispatcher("/WEB-INF/views/ca-form.jsp").forward(req, resp);
+        }
+    }
+
+    private void handleImport(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        try {
+            requireAdmin(req);
+            CaConfig ca = buildFromRequest(req);
+            String certPem = req.getParameter("certificatePem");
+            String keyPem  = req.getParameter("privateKeyPem");
+            String keyPw   = req.getParameter("keyPassword");
+            String parentId = req.getParameter("parentCaId");
+            Long pid = (parentId != null && !parentId.isBlank()) ? Long.parseLong(parentId) : null;
+            CaConfig saved = caService.importCa(ca, certPem, keyPem, keyPw, pid);
+            resp.sendRedirect(req.getContextPath() + "/ca/" + saved.getId());
+        } catch (GeneralSecurityException | OperatorCreationException | IOException | SQLException
+                 | IllegalArgumentException | SecurityException e) {
+            log.error("CA import failed", e);
+            req.setAttribute("error", e.getMessage());
+            // Re-render the import form with non-secret fields only (never the key or password).
+            req.setAttribute("importRoleName",    req.getParameter("roleName"));
+            req.setAttribute("importDisplayName", req.getParameter("displayName"));
+            req.setAttribute("importCaType",      req.getParameter("caType"));
+            req.setAttribute("importParentCaId",  req.getParameter("parentCaId"));
+            req.setAttribute("importCertificate", req.getParameter("certificatePem"));
+            try { req.setAttribute("allCas", caService.findAll()); } catch (SQLException ignored) {}
+            req.getRequestDispatcher("/WEB-INF/views/ca-import.jsp").forward(req, resp);
         }
     }
 

@@ -87,6 +87,37 @@ public class CaService {
         return persist(ca);
     }
 
+    /**
+     * Import an existing Root or Sub CA from a PEM certificate + private key rather
+     * than generating a new key pair. Metadata (subject, serial, validity, key size,
+     * Name Constraints) is taken from the certificate; role/display name and default
+     * issuance settings come from {@code ca}. For a non-root import a parent CA may be
+     * selected ({@code parentCaId}); if none is given the sub CA is stored as an orphan.
+     */
+    public CaConfig importCa(CaConfig ca, String certPem, String keyPem, String keyPassword, Long parentCaId)
+            throws GeneralSecurityException, OperatorCreationException, IOException, SQLException {
+        if (ca.getRoleName() == null || ca.getRoleName().isBlank())
+            throw new IllegalArgumentException("Role name is required");
+        if (ca.getDisplayName() == null || ca.getDisplayName().isBlank())
+            throw new IllegalArgumentException("Display name is required");
+        if (ca.getCaType() == null)
+            throw new IllegalArgumentException("CA type is required");
+
+        String parentCertPem = null;
+        if (ca.getCaType() != CaConfig.CaType.ROOT && parentCaId != null) {
+            CaConfig parent = findById(parentCaId)
+                .orElseThrow(() -> new IllegalArgumentException("Parent CA not found: " + parentCaId));
+            ca.setParentCaId(parent.getId());
+            parentCertPem = parent.getCertificatePem();
+        } else {
+            ca.setParentCaId(null);
+        }
+
+        crypto.importCa(ca, certPem, keyPem, keyPassword, parentCertPem);
+        ca.setStatus(CaConfig.CaStatus.ACTIVE);
+        return persist(ca);
+    }
+
     public void disable(Long id) throws SQLException {
         requireNotRevoked(id);
         updateStatus(id, CaConfig.CaStatus.DISABLED);

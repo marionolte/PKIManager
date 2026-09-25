@@ -42,6 +42,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">PKI Hierarchy</div>
     <a href="<%=ctx%>/ca" class="nav-link active"><i class="bi bi-diagram-3"></i>Certificate Authorities</a>
     <a href="<%=ctx%>/ca/create" class="nav-link"><i class="bi bi-plus-circle"></i>New CA</a>
+    <a href="<%=ctx%>/ca/import" class="nav-link"><i class="bi bi-box-arrow-in-down"></i>Import CA</a>
     <div class="nav-sect mt-2">Certificates</div>
     <a href="<%=ctx%>/cert" class="nav-link"><i class="bi bi-file-earmark-lock2"></i>All Certificates</a>
     <a href="<%=ctx%>/cert/issue" class="nav-link"><i class="bi bi-plus-circle-dotted"></i>Issue Certificate</a>
@@ -50,8 +51,14 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="nav-sect mt-2">Administration</div>
     <a href="<%=ctx%>/admin/users/" class="nav-link"><i class="bi bi-people"></i>Users</a>
     <a href="<%=ctx%>/admin/acme" class="nav-link"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
-    <a href="<%=ctx%>/admin/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
-  </nav>
+    <a href="<%=ctx%>/api-clients/" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/admin/backup/" class="nav-link"><i class="bi bi-hdd-stack"></i>Backup &amp; Restore</a>
+      <div class="nav-sect mt-2"><i class="bi bi-book me-1"></i>Documentation</div>
+    <a href="<%=ctx%>/docs/certificates" class="nav-link"><i class="bi bi-file-earmark-text"></i>Certificates</a>
+    <a href="<%=ctx%>/docs/scim" class="nav-link"><i class="bi bi-people"></i>SCIM</a>
+    <a href="<%=ctx%>/docs/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/docs/acme" class="nav-link"><i class="bi bi-lock"></i>ACME</a>
+</nav>
   <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
     <i class="bi bi-person-circle me-1"></i><%=me!=null?me.getDisplayName():""%>
     <form method="post" action="<%=ctx%>/logout" class="d-inline ms-2">
@@ -62,6 +69,7 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 <div class="main-content">
   <div class="topbar">
     <span style="font-weight:600;color:#0d1b2a;"><i class="bi bi-diagram-3 me-2"></i>Certificate Authorities</span>
+    <a href="<%=ctx%>/ca/import" class="btn btn-outline-primary btn-sm"><i class="bi bi-box-arrow-in-down me-1"></i>Import CA</a>
     <a href="<%=ctx%>/ca/create" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle me-1"></i>New CA</a>
   </div>
   <div class="content-area">

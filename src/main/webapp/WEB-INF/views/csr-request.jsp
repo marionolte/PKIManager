@@ -30,7 +30,12 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <ol class="breadcrumb">
       <li class="breadcrumb-item"><a href="<%=ctx%>/public/csr">Submit CSR</a></li>
     </ol>
-  </nav>
+      <div class="nav-sect mt-2"><i class="bi bi-book me-1"></i>Documentation</div>
+    <a href="<%=ctx%>/docs/certificates" class="nav-link"><i class="bi bi-file-earmark-text"></i>Certificates</a>
+    <a href="<%=ctx%>/docs/scim" class="nav-link"><i class="bi bi-people"></i>SCIM</a>
+    <a href="<%=ctx%>/docs/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/docs/acme" class="nav-link"><i class="bi bi-lock"></i>ACME</a>
+</nav>
 
   <div class="card p-4">
     <h5 class="fw-bold mb-1"><i class="bi bi-file-earmark-plus me-2 text-primary"></i>Submit a Certificate Signing Request</h5>

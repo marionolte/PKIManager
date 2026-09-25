@@ -1,6 +1,7 @@
 <%@ page contentType="text/html;charset=UTF-8" %>
 <%@ page import="java.util.List, com.macmario.services.pki.entity.ApiClient, com.macmario.services.pki.entity.CaConfig, com.macmario.services.pki.entity.PkiUser" %>
-<%! private String e(String s){if(s==null)return "";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");} %>
+<%! private String e(String s){if(s==null)return "";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&#39;");}
+    private String fmt(java.time.LocalDateTime t){return t==null?"":t.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));} %>
 <% List<ApiClient> clients=(List<ApiClient>)request.getAttribute("clients");
    if(clients==null)clients=java.util.Collections.emptyList();
    List<CaConfig> allCas=(List<CaConfig>)request.getAttribute("allCas");
@@ -11,6 +12,10 @@
    String error=(String)request.getAttribute("error");
    String ctx=request.getContextPath();
    PkiUser me=(PkiUser)session.getAttribute("currentUser");
+   String scheme=request.getScheme();
+   int port=request.getServerPort();
+   String portPart=(("http".equals(scheme)&&port==80)||("https".equals(scheme)&&port==443))?"":(":"+port);
+   String base=scheme+"://"+request.getServerName()+portPart+ctx;
 %>
 <!DOCTYPE html><html lang="de">
 <head><meta charset="UTF-8"/><title>PKI Manager – API Clients</title>
@@ -36,6 +41,14 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
 .table-card .table tbody td{padding:.75rem 1rem;vertical-align:middle;font-size:.875rem;border-color:#f0f0f0;}
 .table-card .table tbody tr:hover{background:#f7faff;}
 .key-box{font-family:monospace;font-size:.75rem;background:#f1f5f9;border:1px solid #dde4ee;border-radius:6px;padding:.35rem .6rem;word-break:break-all;}
+.curl-block{position:relative;margin-bottom:1rem;}
+.curl-label{font-size:.75rem;font-weight:600;color:#475569;margin-bottom:.25rem;}
+.curl-pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:.9rem 1rem;font-size:.75rem;line-height:1.5;overflow-x:auto;margin:0;}
+.curl-pre code{font-family:'Courier New',monospace;white-space:pre;}
+.curl-copy{position:absolute;top:1.8rem;right:.5rem;font-size:.7rem;padding:.15rem .5rem;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;cursor:pointer;}
+.curl-copy:hover{background:#334155;color:#fff;}
+.access-row{display:flex;gap:.5rem;padding:.5rem 0;border-bottom:1px solid #f1f5f9;font-size:.85rem;}
+.access-label{min-width:120px;color:#64748b;font-weight:500;}
 </style></head>
 <body>
 <div class="sidebar">
@@ -57,7 +70,13 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <a href="<%=ctx%>/admin/users/" class="nav-link"><i class="bi bi-people"></i>Users</a>
     <a href="<%=ctx%>/admin/acme" class="nav-link"><i class="bi bi-lock-fill"></i>ACME / Let's Encrypt</a>
     <a href="<%=ctx%>/admin/api-clients" class="nav-link active"><i class="bi bi-key"></i>API Clients</a>
-  </nav>
+    <a href="<%=ctx%>/admin/backup/" class="nav-link"><i class="bi bi-hdd-stack"></i>Backup &amp; Restore</a>
+      <div class="nav-sect mt-2"><i class="bi bi-book me-1"></i>Documentation</div>
+    <a href="<%=ctx%>/docs/certificates" class="nav-link"><i class="bi bi-file-earmark-text"></i>Certificates</a>
+    <a href="<%=ctx%>/docs/scim" class="nav-link"><i class="bi bi-people"></i>SCIM</a>
+    <a href="<%=ctx%>/docs/api-clients" class="nav-link"><i class="bi bi-key"></i>API Clients</a>
+    <a href="<%=ctx%>/docs/acme" class="nav-link"><i class="bi bi-lock"></i>ACME</a>
+</nav>
   <div class="p-3" style="border-top:1px solid rgba(0,0,0,.08);font-size:.72rem;color:#64748b;">
     <i class="bi bi-person-circle me-1"></i><%=me!=null?e(me.getDisplayName()):""%>
     <form method="post" action="<%=ctx%>/logout" class="d-inline ms-2">
@@ -100,28 +119,50 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
     <div class="table-card">
       <table class="table table-hover">
         <thead><tr>
-          <th>Name</th><th>Description</th><th>Default CA</th>
-          <th>API Key (masked)</th><th>Status</th><th>Created</th><th></th>
+          <th>Name</th><th>Owner</th><th>Default CA</th>
+          <th>API Key (masked)</th><th>Status</th><th></th>
         </tr></thead>
         <tbody>
-        <% for(ApiClient ac : clients){ %>
+        <% for(ApiClient ac : clients){
+             String stBadge; String stLabel;
+             if(ac.isPending()){ stBadge="bg-warning text-dark"; stLabel="Pending"; }
+             else if(ac.isRejected()){ stBadge="bg-danger"; stLabel="Rejected"; }
+             else if(ac.isActive()){ stBadge="bg-success"; stLabel="Active"; }
+             else { stBadge="bg-secondary"; stLabel="Disabled"; } %>
         <tr>
-          <td class="fw-semibold"><%=e(ac.getName())%></td>
-          <td style="font-size:.82rem;color:#64748b;"><%=e(ac.getDescription())%></td>
+          <td class="fw-semibold"><%=e(ac.getName())%>
+            <% if(ac.getDescription()!=null&&!ac.getDescription().isBlank()){ %><div style="font-size:.75rem;color:#94a3b8;"><%=e(ac.getDescription())%></div><% } %>
+          </td>
+          <td style="font-size:.82rem;"><%=ac.getOwnerName()!=null?e(ac.getOwnerName()):"<span class='text-muted'>—</span>"%></td>
           <td style="font-size:.82rem;"><%=ac.getDefaultCaName()!=null?e(ac.getDefaultCaName()):"<span class='text-muted'>—</span>"%></td>
           <td>
-            <span class="key-box"><%=e(ac.getApiKey().substring(0,Math.min(12,ac.getApiKey().length())))%>…</span>
+            <% if(ac.isApproved()){ %><span class="key-box"><%=e(ac.getApiKey().substring(0,Math.min(12,ac.getApiKey().length())))%>…</span><% } else { %><span class="text-muted">—</span><% } %>
           </td>
+          <td><span class="badge <%=stBadge%>"><%=stLabel%></span></td>
           <td>
-            <% if(ac.isActive()){ %>
-            <span class="badge" style="background:#d1fae5;color:#065f46;">Active</span>
-            <% } else { %>
-            <span class="badge" style="background:#fee2e2;color:#991b1b;">Disabled</span>
-            <% } %>
-          </td>
-          <td style="font-size:.82rem;"><%=ac.getCreatedAt()!=null?ac.getCreatedAt().toString().substring(0,10):""%></td>
-          <td>
-            <div class="d-flex gap-1 flex-wrap">
+            <div class="d-flex gap-1 flex-wrap justify-content-end">
+              <% if(ac.isPending() || ac.isRejected()){ %>
+              <%-- Pending or revoked: approve/reinstate (and reject while pending) --%>
+              <form method="post" action="<%=ctx%>/admin/api-clients/<%=ac.getId()%>/approve" class="d-inline"
+                    data-name="<%=e(ac.getName())%>" onsubmit="return confirm('<%=ac.isRejected()?"Reinstate":"Approve"%> API client ' + this.dataset.name + '?')">
+                <button class="btn btn-sm btn-success py-0 px-2" title="<%=ac.isRejected()?"Reinstate":"Approve"%>"><i class="bi bi-check-lg"></i> <%=ac.isRejected()?"Reinstate":"Approve"%></button>
+              </form>
+              <% if(ac.isPending()){ %>
+              <form method="post" action="<%=ctx%>/admin/api-clients/<%=ac.getId()%>/reject" class="d-inline"
+                    data-name="<%=e(ac.getName())%>" onsubmit="return confirm('Reject API client ' + this.dataset.name + '?')">
+                <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Reject"><i class="bi bi-x-lg"></i></button>
+              </form>
+              <% } %>
+              <% } else { %>
+              <%-- Access info --%>
+              <button class="btn btn-sm btn-outline-info py-0 px-2" title="Access info"
+                data-bs-toggle="modal" data-bs-target="#accessModal"
+                data-name="<%=e(ac.getName())%>"
+                data-lastused="<%=fmt(ac.getLastUsedAt())%>"
+                data-ip="<%=e(ac.getLastIp()!=null?ac.getLastIp():"")%>"
+                data-ua="<%=e(ac.getLastUserAgent()!=null?ac.getLastUserAgent():"")%>">
+                <i class="bi bi-activity"></i>
+              </button>
               <%-- Edit --%>
               <button class="btn btn-sm btn-outline-primary py-0 px-2"
                 data-bs-toggle="modal" data-bs-target="#editModal"
@@ -131,8 +172,13 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
                 data-caid="<%=ac.getDefaultCaId()!=null?ac.getDefaultCaId():""%>">
                 <i class="bi bi-pencil"></i>
               </button>
-              <%-- Enable / Disable --%>
-              <% if(ac.isActive()){ %>
+              <%-- Enable / Disable (owned clients are revoked so the owner can't re-enable) --%>
+              <% if(ac.isActive() && ac.getOwnerUserId()!=null){ %>
+              <form method="post" action="<%=ctx%>/admin/api-clients/<%=ac.getId()%>/reject" class="d-inline"
+                    data-name="<%=e(ac.getName())%>" onsubmit="return confirm('Revoke API client ' + this.dataset.name + '? The owner cannot re-enable it.')">
+                <button class="btn btn-sm btn-outline-warning py-0 px-2" title="Revoke"><i class="bi bi-slash-circle"></i></button>
+              </form>
+              <% } else if(ac.isActive()){ %>
               <form method="post" action="<%=ctx%>/admin/api-clients/<%=ac.getId()%>/disable" class="d-inline">
                 <button class="btn btn-sm btn-outline-warning py-0 px-2" title="Disable"><i class="bi bi-pause-circle"></i></button>
               </form>
@@ -143,12 +189,13 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
               <% } %>
               <%-- Rotate key --%>
               <form method="post" action="<%=ctx%>/admin/api-clients/<%=ac.getId()%>/rotate" class="d-inline"
-                    onsubmit="return confirm('Rotate API key for <%=e(ac.getName())%>? The old key stops working immediately.')">
+                    data-name="<%=e(ac.getName())%>" onsubmit="return confirm('Rotate API key for ' + this.dataset.name + '? The old key stops working immediately.')">
                 <button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Rotate API key"><i class="bi bi-arrow-repeat"></i></button>
               </form>
-              <%-- Delete --%>
+              <% } %>
+              <%-- Delete (always available) --%>
               <form method="post" action="<%=ctx%>/admin/api-clients/<%=ac.getId()%>/delete" class="d-inline"
-                    onsubmit="return confirm('Delete API client <%=e(ac.getName())%>? All issued certificates remain but the key stops working.')">
+                    data-name="<%=e(ac.getName())%>" onsubmit="return confirm('Delete API client ' + this.dataset.name + '? Issued certificates remain but the key stops working.')">
                 <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete"><i class="bi bi-trash"></i></button>
               </form>
             </div>
@@ -178,6 +225,60 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
         </tbody>
       </table>
       <p class="mb-0 mt-2" style="font-size:.78rem;color:#888;">API clients cannot access CA management. Each client only sees its own certificates.</p>
+
+      <h6 class="fw-bold mt-4 mb-2"><i class="bi bi-terminal me-2 text-success"></i>curl Examples</h6>
+      <p style="font-size:.8rem;color:#555;">Replace <code>pki_YOUR_API_KEY</code> with your client key. Base URL is auto-detected: <code><%=e(base)%></code></p>
+
+      <div class="curl-block">
+        <div class="curl-label">List available issuing CAs</div>
+        <pre class="curl-pre"><code>curl -H "X-API-Key: pki_YOUR_API_KEY" \
+  <%=e(base)%>/api/v1/cas</code></pre>
+      </div>
+
+      <div class="curl-block">
+        <div class="curl-label">List your own certificates</div>
+        <pre class="curl-pre"><code>curl -H "X-API-Key: pki_YOUR_API_KEY" \
+  <%=e(base)%>/api/v1/certs</code></pre>
+      </div>
+
+      <div class="curl-block">
+        <div class="curl-label">Issue a certificate (server generates the key pair)</div>
+        <pre class="curl-pre"><code>curl -X POST \
+  -H "X-API-Key: pki_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "commonName": "app.example.local",
+    "certType": "SERVER",
+    "sanDns": "app.example.local,www.example.local",
+    "organization": "ACME Corp",
+    "keySize": 2048,
+    "caId": 1
+  }' \
+  <%=e(base)%>/api/v1/certs</code></pre>
+      </div>
+
+      <div class="curl-block">
+        <div class="curl-label">Sign an external CSR (returns the certificate immediately)</div>
+        <pre class="curl-pre"><code># Turn a PEM CSR into a JSON string and post it:
+CSR=$(awk '{printf "%s\\n", $0}' request.csr)
+curl -X POST \
+  -H "X-API-Key: pki_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"csrPem\": \"$CSR\", \"certType\": \"SERVER\", \"caId\": 1}" \
+  <%=e(base)%>/api/v1/certs/sign</code></pre>
+      </div>
+
+      <div class="curl-block">
+        <div class="curl-label">Get certificate details / download PEM (own certificates only)</div>
+        <pre class="curl-pre"><code>curl -H "X-API-Key: pki_YOUR_API_KEY" <%=e(base)%>/api/v1/certs/123
+curl -H "X-API-Key: pki_YOUR_API_KEY" <%=e(base)%>/api/v1/certs/123/pem -o cert.pem</code></pre>
+      </div>
+
+      <div class="curl-block">
+        <div class="curl-label">List / check CSR jobs</div>
+        <pre class="curl-pre"><code>curl -H "X-API-Key: pki_YOUR_API_KEY" <%=e(base)%>/api/v1/csr
+curl -H "X-API-Key: pki_YOUR_API_KEY" <%=e(base)%>/api/v1/csr/45</code></pre>
+      </div>
     </div>
   </div>
 </div>
@@ -216,6 +317,27 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;}
           <button type="submit" class="btn btn-success"><i class="bi bi-plus-circle me-1"></i>Create</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<%-- Access Info Modal --%>
+<div class="modal fade" id="accessModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-activity me-2 text-info"></i>API Client Access</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="access-row"><span class="access-label">Client</span><span id="accName" class="fw-semibold"></span></div>
+        <div class="access-row"><span class="access-label">Last Login</span><span id="accLastUsed"></span></div>
+        <div class="access-row"><span class="access-label">Remote IP</span><code id="accIp"></code></div>
+        <div class="access-row" style="border-bottom:none;"><span class="access-label">User-Agent</span><span id="accUa" style="word-break:break-all;"></span></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
     </div>
   </div>
 </div>
@@ -267,6 +389,30 @@ document.getElementById('editModal').addEventListener('show.bs.modal', function(
   var sel = document.getElementById('editCaId');
   for(var i=0;i<sel.options.length;i++) sel.options[i].selected = (sel.options[i].value === caId);
   document.getElementById('editForm').action = '<%=ctx%>/admin/api-clients/' + btn.dataset.id;
+});
+
+document.getElementById('accessModal').addEventListener('show.bs.modal', function(e) {
+  var btn = e.relatedTarget;
+  document.getElementById('accName').textContent = btn.dataset.name || '';
+  document.getElementById('accLastUsed').textContent = btn.dataset.lastused || 'Never used';
+  document.getElementById('accIp').textContent = btn.dataset.ip || '—';
+  document.getElementById('accUa').textContent = btn.dataset.ua || '—';
+});
+
+// Add a Copy button to each curl example
+document.querySelectorAll('.curl-block').forEach(function(block){
+  var btn = document.createElement('button');
+  btn.className = 'curl-copy';
+  btn.type = 'button';
+  btn.textContent = 'Copy';
+  btn.addEventListener('click', function(){
+    var code = block.querySelector('code').textContent;
+    navigator.clipboard.writeText(code).then(function(){
+      btn.textContent = 'Copied!';
+      setTimeout(function(){ btn.textContent = 'Copy'; }, 1500);
+    });
+  });
+  block.appendChild(btn);
 });
 </script>
 </body></html>

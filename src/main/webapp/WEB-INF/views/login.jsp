@@ -3,7 +3,9 @@
     String error = (String) request.getAttribute("error");
     String ctx   = request.getContextPath();
     String next  = request.getParameter("next");
+    String msg   = request.getParameter("msg");
 %>
+<%! private String esc(String s){if(s==null)return"";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;");} %>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -34,6 +36,9 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;display:flex;
   <div class="login-body">
 <% if (error != null) { %>
     <div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-2"></i><%=error%></div>
+<% } %>
+<% if (msg != null) { %>
+    <div class="alert alert-success py-2"><i class="bi bi-check-circle me-2"></i><%=esc(msg)%></div>
 <% } %>
     <form method="post" action="<%=ctx%>/login">
       <% if (next != null) { %><input type="hidden" name="next" value="<%=next%>"/><% } %>

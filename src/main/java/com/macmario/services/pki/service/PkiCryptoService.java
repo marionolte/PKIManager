@@ -3,20 +3,33 @@ package com.macmario.services.pki.service;
 import com.macmario.services.pki.entity.CaConfig;
 import com.macmario.services.pki.entity.CertificateRecord;
 import com.macmario.services.pki.entity.RevokedCertificate;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.asn1.ASN1OctetString;
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
+import org.bouncycastle.asn1.x500.RDN;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
+import org.bouncycastle.asn1.x500.style.IETFUtils;
 import org.bouncycastle.asn1.x509.*;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PEMEncryptedKeyPair;
+import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
+import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder;
+import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder;
 import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.InputDecryptorProvider;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequest;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
@@ -36,6 +49,9 @@ import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -106,9 +122,17 @@ public class PkiCryptoService {
     public void initSubCa(CaConfig ca, CaConfig parentCa) throws GeneralSecurityException, OperatorCreationException, IOException {
         log.info("Generating Sub CA: {} signed by {}", ca.getCommonName(), parentCa.getCommonName());
 
+        // A parent whose certificate carries pathLenConstraint=0 may sign end-entity certs
+        // but not further CAs; signing a sub CA under it would produce an invalid chain.
+        if (parentCa.getCertificatePem() != null && !parentCa.getCertificatePem().isBlank()
+                && readCertificate(parentCa.getCertificatePem()).getBasicConstraints() == 0) {
+            throw new IllegalArgumentException(
+                "Parent CA '" + parentCa.getDisplayName() + "' has pathLenConstraint=0 and cannot sign sub CAs");
+        }
+
         KeyPair keyPair = generateKeyPair(ca.getKeySize());
         X500Name subject = buildX500Name(ca);
-        X500Name issuer = buildX500Name(parentCa);
+        X500Name issuer = issuerNameOf(parentCa);
         BigInteger serial = generateSerial();
 
         LocalDateTime now = LocalDateTime.now();
@@ -172,6 +196,86 @@ public class PkiCryptoService {
         log.info("Applied Name Constraints permittedSubtrees: {}", permitted);
     }
 
+    /**
+     * Import an existing Root or Sub CA from a PEM certificate (or chain) and its
+     * RSA private key. Validates the key matches the certificate, that the cert is a
+     * usable CA cert, and that the declared type is consistent with the certificate.
+     * Populates {@code ca} with the certificate's subject, serial, validity, key size
+     * and any existing Name Constraints. The key is re-emitted unencrypted for storage,
+     * consistent with the rest of the application.
+     *
+     * @param keyPassword   password for an encrypted private key, or null/blank if unencrypted
+     * @param parentCertPem parent CA certificate PEM for a sub CA (null for a root or an orphan sub CA)
+     */
+    public void importCa(CaConfig ca, String certPem, String keyPem, String keyPassword, String parentCertPem)
+            throws GeneralSecurityException, IOException {
+        if (certPem == null || certPem.isBlank()) throw new IllegalArgumentException("Certificate PEM is required");
+        if (keyPem == null || keyPem.isBlank())   throw new IllegalArgumentException("Private key PEM is required");
+
+        PrivateKey key = readPrivateKeyFlexible(keyPem, keyPassword);
+        if (!(key instanceof RSAPrivateKey rsaKey))
+            throw new IllegalArgumentException("Only RSA private keys are supported");
+
+        List<X509Certificate> certs = readCertificates(certPem);
+        if (certs.isEmpty())
+            throw new IllegalArgumentException("No certificate found in the certificate PEM input");
+
+        // Pick the certificate whose public key matches the private key (doubles as key↔cert check).
+        X509Certificate cert = null;
+        for (X509Certificate c : certs) {
+            if (c.getPublicKey() instanceof RSAPublicKey pub && pub.getModulus().equals(rsaKey.getModulus())) {
+                cert = c; break;
+            }
+        }
+        if (cert == null)
+            throw new IllegalArgumentException("The private key does not match any certificate in the provided PEM");
+
+        // Must be a CA certificate able to sign other certificates.
+        if (cert.getBasicConstraints() == -1)
+            throw new IllegalArgumentException("Not a CA certificate: basicConstraints CA:TRUE is required");
+        boolean[] ku = cert.getKeyUsage();
+        if (ku != null && ku.length > 5 && !ku[5]) // bit 5 == keyCertSign
+            throw new IllegalArgumentException("Certificate keyUsage does not permit certificate signing (keyCertSign)");
+
+        boolean selfSigned = cert.getSubjectX500Principal().equals(cert.getIssuerX500Principal());
+        CaConfig.CaType type = ca.getCaType();
+        if (type == CaConfig.CaType.ROOT) {
+            if (!selfSigned)
+                throw new IllegalArgumentException("A ROOT CA certificate must be self-signed (subject equals issuer)");
+            try { cert.verify(cert.getPublicKey()); }
+            catch (GeneralSecurityException e) { throw new IllegalArgumentException("Root certificate signature is not valid: " + e.getMessage()); }
+        } else {
+            if (selfSigned)
+                throw new IllegalArgumentException("A self-signed certificate cannot be imported as a " + type + " CA — choose ROOT instead");
+        }
+
+        if (parentCertPem != null && !parentCertPem.isBlank()) {
+            X509Certificate parentCert = readCertificate(parentCertPem);
+            X500Name importedIssuer = new JcaX509CertificateHolder(cert).getIssuer();
+            X500Name parentSubject  = new JcaX509CertificateHolder(parentCert).getSubject();
+            if (!importedIssuer.equals(parentSubject))
+                throw new IllegalArgumentException("The certificate's issuer does not match the selected parent CA's subject");
+            try { cert.verify(parentCert.getPublicKey()); }
+            catch (GeneralSecurityException e) { throw new IllegalArgumentException("Certificate was not signed by the selected parent CA: " + e.getMessage()); }
+        }
+
+        populateDisplayFields(ca, cert);
+        ca.setSerialNumber(cert.getSerialNumber().toString(16).toUpperCase());
+        ca.setValidFrom(LocalDateTime.ofInstant(cert.getNotBefore().toInstant(), ZoneId.systemDefault()));
+        ca.setValidUntil(LocalDateTime.ofInstant(cert.getNotAfter().toInstant(), ZoneId.systemDefault()));
+        ca.setKeySize(rsaKey.getModulus().bitLength());
+        ca.setPermittedDomains(extractPermittedDomains(cert));
+        // Read issuance settings straight from the certificate rather than the form.
+        ca.setDefaultMd(digestFromSigAlg(cert));
+        ca.setDefaultDays(validityDays(cert));
+        ca.setCrlUrl(extractCrlUrl(cert));
+        ca.setOcspUrl(extractOcspUrl(cert));
+        ca.setCertificatePem(toPem(cert));
+        ca.setPrivateKeyPem(toPem(key));
+        log.info("Imported {} CA '{}' serial={} md={} days={} crl={} ocsp={}", type, ca.getCommonName(),
+                ca.getSerialNumber(), ca.getDefaultMd(), ca.getDefaultDays(), ca.getCrlUrl(), ca.getOcspUrl());
+    }
+
     // ──────────────────────────────────────────
     // Certificate Issuance
     // ──────────────────────────────────────────
@@ -185,7 +289,7 @@ public class PkiCryptoService {
                 new PEMParser(new StringReader(csrPem)).readObject();
         JcaPKCS10CertificationRequest jcaCsr = new JcaPKCS10CertificationRequest(csr).setProvider("BC");
 
-        X500Name issuer = buildX500Name(ca);
+        X500Name issuer = issuerNameOf(ca);
         BigInteger serial = generateSerial();
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiry = now.plusDays(ca.getDefaultDays());
@@ -297,6 +401,173 @@ public class PkiCryptoService {
             }
             throw new IllegalArgumentException("Cannot parse private key PEM: " + obj.getClass());
         }
+    }
+
+    /** Parse a private key PEM, decrypting with {@code password} when the key is encrypted. */
+    private PrivateKey readPrivateKeyFlexible(String pem, String password) throws IOException {
+        JcaPEMKeyConverter conv = new JcaPEMKeyConverter().setProvider("BC");
+        char[] pw = (password == null) ? new char[0] : password.toCharArray();
+        boolean hasPw = password != null && !password.isEmpty();
+        try (PEMParser parser = new PEMParser(new StringReader(pem))) {
+            Object obj = parser.readObject();
+            if (obj == null)
+                throw new IllegalArgumentException("Could not parse private key PEM (empty or invalid)");
+
+            if (obj instanceof PEMEncryptedKeyPair enc) {
+                if (!hasPw) throw new IllegalArgumentException("Private key is encrypted; a key password is required");
+                try {
+                    PEMKeyPair kp = enc.decryptKeyPair(new JcePEMDecryptorProviderBuilder().setProvider("BC").build(pw));
+                    return conv.getKeyPair(kp).getPrivate();
+                } catch (IOException e) {
+                    throw new IllegalArgumentException("Could not decrypt private key (wrong password?)");
+                }
+            }
+            if (obj instanceof PKCS8EncryptedPrivateKeyInfo enc) {
+                if (!hasPw) throw new IllegalArgumentException("Private key is encrypted; a key password is required");
+                try {
+                    InputDecryptorProvider dp = new JceOpenSSLPKCS8DecryptorProviderBuilder().setProvider("BC").build(pw);
+                    return conv.getPrivateKey(enc.decryptPrivateKeyInfo(dp));
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Could not decrypt private key (wrong password?)");
+                }
+            }
+            if (obj instanceof PEMKeyPair kp) {
+                return conv.getKeyPair(kp).getPrivate();
+            }
+            if (obj instanceof PrivateKeyInfo pki) {
+                return conv.getPrivateKey(pki);
+            }
+            throw new IllegalArgumentException("Unsupported private key format: " + obj.getClass().getSimpleName());
+        }
+    }
+
+    /** Read the first certificate from a PEM string. */
+    private X509Certificate readCertificate(String pem) throws IOException, GeneralSecurityException {
+        List<X509Certificate> list = readCertificates(pem);
+        if (list.isEmpty()) throw new IllegalArgumentException("No certificate found in PEM input");
+        return list.get(0);
+    }
+
+    /** Read every certificate in a PEM string (supports a full chain / bundle). */
+    private List<X509Certificate> readCertificates(String pem) throws IOException, GeneralSecurityException {
+        List<X509Certificate> out = new ArrayList<>();
+        JcaX509CertificateConverter conv = new JcaX509CertificateConverter().setProvider("BC");
+        try (PEMParser parser = new PEMParser(new StringReader(pem))) {
+            Object obj;
+            while ((obj = parser.readObject()) != null) {
+                if (obj instanceof X509CertificateHolder holder) out.add(conv.getCertificate(holder));
+            }
+        }
+        return out;
+    }
+
+    /** Issuer DN for signing: the CA's own certificate subject (exact bytes), falling back to a rebuilt DN. */
+    private X500Name issuerNameOf(CaConfig ca) throws IOException, GeneralSecurityException {
+        if (ca.getCertificatePem() != null && !ca.getCertificatePem().isBlank()) {
+            return new JcaX509CertificateHolder(readCertificate(ca.getCertificatePem())).getSubject();
+        }
+        return buildX500Name(ca);
+    }
+
+    /** Populate the display DN fields of a CaConfig from a certificate subject (lossy; truncated to column widths). */
+    private void populateDisplayFields(CaConfig ca, X509Certificate cert) throws IOException, GeneralSecurityException {
+        X500Name subj = new JcaX509CertificateHolder(cert).getSubject();
+        String cn = firstRdn(subj, BCStyle.CN);
+        ca.setCommonName(trunc(cn != null ? cn : cert.getSubjectX500Principal().getName(), 200));
+        ca.setOrganization(trunc(firstRdn(subj, BCStyle.O), 200));
+        ca.setOrgUnit(trunc(firstRdn(subj, BCStyle.OU), 200));
+        ca.setCountry(trunc(firstRdn(subj, BCStyle.C), 3));
+        ca.setState(trunc(firstRdn(subj, BCStyle.ST), 100));
+        ca.setLocality(trunc(firstRdn(subj, BCStyle.L), 100));
+        ca.setEmailAddress(trunc(firstRdn(subj, BCStyle.EmailAddress), 200));
+    }
+
+    private String firstRdn(X500Name name, ASN1ObjectIdentifier oid) {
+        RDN[] rdns = name.getRDNs(oid);
+        if (rdns.length == 0) return null;
+        return IETFUtils.valueToString(rdns[0].getFirst().getValue());
+    }
+
+    private String trunc(String s, int max) {
+        if (s == null) return null;
+        String t = s.trim();
+        if (t.isEmpty()) return null;
+        return t.length() > max ? t.substring(0, max) : t;
+    }
+
+    /** Extract permitted dNSName subtrees from an existing NameConstraints extension, if any. */
+    private String extractPermittedDomains(X509Certificate cert) {
+        try {
+            byte[] ext = cert.getExtensionValue(Extension.nameConstraints.getId());
+            if (ext == null) return null;
+            NameConstraints nc = NameConstraints.getInstance(ASN1OctetString.getInstance(ext).getOctets());
+            if (nc == null || nc.getPermittedSubtrees() == null) return null;
+            List<String> dns = new ArrayList<>();
+            for (GeneralSubtree gs : nc.getPermittedSubtrees()) {
+                GeneralName gn = gs.getBase();
+                if (gn.getTagNo() == GeneralName.dNSName) dns.add(gn.getName().toString());
+            }
+            return dns.isEmpty() ? null : String.join(", ", dns);
+        } catch (RuntimeException e) {
+            log.warn("Could not parse NameConstraints from imported cert: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** Map the certificate's signature algorithm to a digest name (sha256/sha384/sha512). */
+    private String digestFromSigAlg(X509Certificate cert) {
+        String a = cert.getSigAlgName() == null ? "" : cert.getSigAlgName().toUpperCase();
+        if (a.contains("SHA512")) return "sha512";
+        if (a.contains("SHA384")) return "sha384";
+        return "sha256";
+    }
+
+    /** Certificate lifetime in whole days (notAfter − notBefore), clamped to a sane range. */
+    private int validityDays(X509Certificate cert) {
+        long days = Duration.between(cert.getNotBefore().toInstant(), cert.getNotAfter().toInstant()).toDays();
+        return (int) Math.max(1, Math.min(days, 100_000));
+    }
+
+    /** First HTTP(S) CRL Distribution Point URI in the certificate, or null. */
+    private String extractCrlUrl(X509Certificate cert) {
+        try {
+            byte[] ext = cert.getExtensionValue(Extension.cRLDistributionPoints.getId());
+            if (ext == null) return null;
+            CRLDistPoint dp = CRLDistPoint.getInstance(ASN1OctetString.getInstance(ext).getOctets());
+            for (DistributionPoint p : dp.getDistributionPoints()) {
+                DistributionPointName dpn = p.getDistributionPoint();
+                if (dpn == null || dpn.getType() != DistributionPointName.FULL_NAME) continue;
+                for (GeneralName gn : GeneralNames.getInstance(dpn.getName()).getNames()) {
+                    if (gn.getTagNo() == GeneralName.uniformResourceIdentifier) {
+                        String uri = gn.getName().toString();
+                        if (uri.startsWith("http")) return uri;
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("Could not parse CRL distribution point from imported cert: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /** OCSP responder URI from the Authority Information Access extension, or null. */
+    private String extractOcspUrl(X509Certificate cert) {
+        try {
+            byte[] ext = cert.getExtensionValue(Extension.authorityInfoAccess.getId());
+            if (ext == null) return null;
+            AuthorityInformationAccess aia =
+                AuthorityInformationAccess.getInstance(ASN1OctetString.getInstance(ext).getOctets());
+            for (AccessDescription ad : aia.getAccessDescriptions()) {
+                if (X509ObjectIdentifiers.id_ad_ocsp.equals(ad.getAccessMethod())) {
+                    GeneralName loc = ad.getAccessLocation();
+                    if (loc.getTagNo() == GeneralName.uniformResourceIdentifier)
+                        return loc.getName().toString();
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("Could not parse OCSP URL from imported cert: {}", e.getMessage());
+        }
+        return null;
     }
 
     private String toPem(Object obj) throws IOException {
