@@ -1,4 +1,4 @@
-# PKI Manager v1.4
+# PKI Manager v1.5
 
 A self-contained internal Certificate Authority web application for managing a full PKI hierarchy.
 Built with pure Jakarta Servlet (no framework), Bouncy Castle cryptography, and an embedded H2 database.
