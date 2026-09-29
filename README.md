@@ -115,6 +115,12 @@ Signing creates a full `CERTIFICATE_RECORD` and links it to the CSR request.
 ### Multi-User Authentication
 Session-based login with PBKDF2WithHmacSHA256 passwords (310,000 iterations, 16-byte salt).
 
+**Brute-force protection (per IP):** after **3** failed logins the login page is blocked for that IP for a
+random **10–60 seconds**; after **10** failed logins the IP is blocked for **30 minutes**. A successful login
+clears the counter, and it also resets after a long idle period. State is in-memory
+(`LoginThrottleService`, keyed by `request.getRemoteAddr()`); behind a reverse proxy configure Tomcat's
+`RemoteIpValve` so the real client IP is used. While blocked, the form is disabled and POSTs return `429`.
+
 Two roles:
 | Role | Capabilities |
 |---|---|
@@ -522,6 +528,7 @@ src/main/java/com/macmario/services/pki/
 │   ├── PkiCryptoService.java     Bouncy Castle: key gen, CA init/import, Name Constraints, CSR signing
 │   ├── CsrRequestService.java    CSR submission queue
 │   ├── UserService.java          PBKDF2 auth, user CRUD
+│   ├── LoginThrottleService.java Per-IP login brute-force throttle
 │   ├── ApiClientService.java     API client CRUD + key generation/rotation
 │   ├── AcmeClientService.java    Full ACME v2 client (RFC 8555, ES256)
 │   ├── ConfigService.java        Read/write PKI_CONFIGURATION settings
@@ -596,8 +603,10 @@ default `22:05`), and `backup.auto.keep` keys in `PKI_CONFIGURATION` (editable o
   private keys, API keys and password hashes. They are written owner-only where POSIX permissions
   are supported; treat the whole `pki-data/` directory as a secret and protect exported files the
   same way.
-- There is no rate limiting on the login or API endpoints. Place a reverse proxy (nginx, Apache)
-  in front of Tomcat for production use.
+- The **login** endpoint has built-in per-IP brute-force throttling (3 failures → 10–60 s block,
+  10 failures → 30 min block). The **API** endpoints have no rate limiting — place a reverse proxy
+  (nginx, Apache) in front of Tomcat for production use, and ensure it preserves the client IP
+  (`RemoteIpValve`) so the login throttle sees real addresses.
 - API keys are stored in plain text in the H2 database (same threat model as private keys).
   Treat the `pki-data/` directory as a secret. Rotate keys immediately if they are exposed.
 - API clients are strictly scoped: they cannot access CA management or other clients' certificates.

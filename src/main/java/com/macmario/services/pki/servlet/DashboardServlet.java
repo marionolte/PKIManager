@@ -8,6 +8,7 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -21,6 +22,13 @@ public class DashboardServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
+        // Defence in depth: the context-root ("") mapping is not covered by AuthFilter,
+        // so require an authenticated session here too — never render the dashboard otherwise.
+        HttpSession session = req.getSession(false);
+        if (session == null || session.getAttribute("currentUser") == null) {
+            resp.sendRedirect(req.getContextPath() + "/login");
+            return;
+        }
         try {
             req.setAttribute("caList",       caService.findAll());
             req.setAttribute("totalCerts",   certService.countTotal());

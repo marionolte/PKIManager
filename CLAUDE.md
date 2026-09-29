@@ -80,6 +80,8 @@ All crypto goes through **`PkiCryptoService`** using **Bouncy Castle 1.84** (`bc
 
 Private keys are stored unencrypted in PEM format in H2. There is no authentication layer — access control must be added at the Tomcat realm or reverse proxy level.
 
+**Login brute-force throttle** (`LoginThrottleService`, in-memory, keyed by `request.getRemoteAddr()`): after 3 failed logins the IP is blocked for a random 10–60 s; after 10, for 10 minutes. `LoginServlet` rejects with `429` while blocked; a successful login clears the counter. Behind a proxy, use `RemoteIpValve` for real client IPs.
+
 **SCIM 2.0** (`ScimService` + `ScimServlet` at `/scim/v2/*`, `ScimAuthFilter`): identity/resource provisioning for Users, Groups (roles ADMIN/VIEWER, membership-driven), Certificates (revoke-only) and ApiClients. Auth is a static bearer token whose SHA-256 lives in `PKI_CONFIGURATION` (`scim.token.sha256`; generate/rotate on the Users admin page). Responses are hand-built JSON — never entity serialization — so hashes/keys never leak. Role changes/deactivation take effect immediately because `AuthFilter` reloads the session user each request. Last-active-admin is protected on every path.
 
 ## Internal Dependencies
