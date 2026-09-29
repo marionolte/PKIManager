@@ -4,6 +4,8 @@
     String ctx   = request.getContextPath();
     String next  = request.getParameter("next");
     String msg   = request.getParameter("msg");
+    Long blockedSeconds = (Long) request.getAttribute("blockedSeconds");
+    boolean blocked = blockedSeconds != null && blockedSeconds > 0;
 %>
 <%! private String esc(String s){if(s==null)return"";return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;");} %>
 <!DOCTYPE html>
@@ -40,24 +42,39 @@ body{background:var(--pki-light);font-family:'Segoe UI',sans-serif;display:flex;
 <% if (msg != null) { %>
     <div class="alert alert-success py-2"><i class="bi bi-check-circle me-2"></i><%=esc(msg)%></div>
 <% } %>
+<% if (blocked) { %>
+    <div class="alert alert-warning py-2"><i class="bi bi-shield-lock me-2"></i>
+      This address is temporarily blocked due to failed login attempts.
+      Please wait <strong><span id="retry"><%=blockedSeconds%></span></strong> seconds.
+    </div>
+<% } %>
     <form method="post" action="<%=ctx%>/login">
       <% if (next != null) { %><input type="hidden" name="next" value="<%=next%>"/><% } %>
       <div class="mb-3">
         <label class="form-label fw-semibold" style="font-size:.875rem;">Username</label>
         <div class="input-group">
           <span class="input-group-text"><i class="bi bi-person"></i></span>
-          <input type="text" name="username" class="form-control" autofocus required/>
+          <input type="text" name="username" class="form-control" <%=blocked?"disabled":"autofocus"%> required/>
         </div>
       </div>
       <div class="mb-4">
         <label class="form-label fw-semibold" style="font-size:.875rem;">Password</label>
         <div class="input-group">
           <span class="input-group-text"><i class="bi bi-lock"></i></span>
-          <input type="password" name="password" class="form-control" required/>
+          <input type="password" name="password" class="form-control" <%=blocked?"disabled":""%> required/>
         </div>
       </div>
-      <button type="submit" class="btn btn-login"><i class="bi bi-box-arrow-in-right me-2"></i>Sign in</button>
+      <button type="submit" id="loginBtn" class="btn btn-login" <%=blocked?"disabled":""%>><i class="bi bi-box-arrow-in-right me-2"></i>Sign in</button>
     </form>
+<% if (blocked) { %>
+    <script>
+    (function(){
+      var left=<%=blockedSeconds%>, el=document.getElementById('retry');
+      var t=setInterval(function(){ left--; if(el)el.textContent=left;
+        if(left<=0){ clearInterval(t); location.reload(); } }, 1000);
+    })();
+    </script>
+<% } %>
     <div class="public-links">
       <a href="<%=ctx%>/public/csr"><i class="bi bi-file-earmark-plus me-1"></i>Submit a CSR for signing</a>
     </div>
